@@ -1,0 +1,25 @@
+{
+  "name": "syncspace",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "prepare": "husky",
+    "dev": "dotenv -e .env -- pnpm --parallel --filter @syncspace/api --filter @syncspace/web dev",
+    "lint": "biome lint .",
+    "format:check": "biome format .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm test:governance && pnpm -r test",
+    "test:governance": "node --test scripts/*.test.mjs",
+    "test:integration": "dotenv -e .env -- pnpm --filter @syncspace/api test:integration",
+    "build": "pnpm -r build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @syncspace/api db:migrate",
+    "db:generate": "pnpm --filter @syncspace/api db:generate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "dotenv-cli": "^8.0.0",
+    "husky": "^9.1.7"
+  }
+}

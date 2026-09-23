@@ -1,0 +1,61 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify process history
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            node scripts/verify-process-update.mjs --range "$BASE" "$HEAD"
+          else
+            node scripts/verify-process-update.mjs --all
+          fi
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: syncspace
+          POSTGRES_PASSWORD: syncspace
+          POSTGRES_DB: syncspace
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U syncspace" --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://syncspace:syncspace@localhost:5432/syncspace?schema=public
+      REDIS_URL: redis://localhost:6379
+      API_PORT: '3001'
+      WEB_ORIGIN: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env
+      - run: pnpm db:generate
+      - run: pnpm db:migrate
+      - run: pnpm check
+      - run: pnpm test:integration
+      - run: pnpm build

@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Phase 1 connectivity probe. Remove with a reviewed migration once a domain health query replaces it.
+model InfrastructureProbe {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("infrastructure_probe")
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  authSubject String   @unique @map("auth_subject") @db.Uuid
+  email       String   @db.VarChar(320)
+  displayName String   @map("display_name") @db.VarChar(80)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
