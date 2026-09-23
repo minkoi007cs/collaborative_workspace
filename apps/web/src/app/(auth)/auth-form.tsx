@@ -9,9 +9,11 @@ import { supabaseConfig } from '@/lib/supabase/config';
 export function AuthForm({
   mode,
   callbackError = false,
+  nextPath = '/app',
 }: {
   mode: 'login' | 'signup';
   callbackError?: boolean;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -34,7 +36,7 @@ export function AuthForm({
           password,
         });
         if (error) throw error;
-        router.push('/app');
+        router.push(nextPath);
         router.refresh();
       } else {
         const { data, error } = await client.auth.signUp({
@@ -46,7 +48,7 @@ export function AuthForm({
         });
         if (error) throw error;
         if (data.session) {
-          router.push('/app');
+          router.push(nextPath);
           router.refresh();
         } else {
           setMessage('Check your email for a confirmation link, then sign in.');
@@ -156,7 +158,9 @@ export function AuthForm({
         )}
         <p className="auth-switch">
           {mode === 'login' ? 'New to SyncSpace?' : 'Already have an account?'}{' '}
-          <Link href={mode === 'login' ? '/signup' : '/login'}>
+          <Link
+            href={`${mode === 'login' ? '/signup' : '/login'}${nextPath !== '/app' ? `?next=${encodeURIComponent(nextPath)}` : ''}`}
+          >
             {mode === 'login' ? 'Create an account' : 'Sign in'}
           </Link>
         </p>

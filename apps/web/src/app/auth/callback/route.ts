@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { serverClient } from '@/lib/supabase/server';
+import { safeNextPath } from '@/lib/auth-next';
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
@@ -7,8 +8,12 @@ export async function GET(request: NextRequest) {
   if (code && client) {
     const { error } = await client.auth.exchangeCodeForSession(code);
     if (!error) {
-      const response = NextResponse.redirect(new URL('/app', request.url));
+      const nextPath = safeNextPath(
+        request.cookies.get('syncspace_auth_next')?.value,
+      );
+      const response = NextResponse.redirect(new URL(nextPath, request.url));
       response.headers.set('Cache-Control', 'private, no-store');
+      response.cookies.delete('syncspace_auth_next');
       return response;
     }
   }

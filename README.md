@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a planned real-time workspace and task collaboration platform. The repository currently contains governance, the Phase 1 foundation, and Phase 2 authentication/profile flows. Workspaces, boards, and collaborative tasks are not yet implemented.
+SyncSpace is a planned real-time workspace and task collaboration platform. The repository currently contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, and Phase 3 workspace membership and invitations. Projects, boards, and collaborative tasks are not yet implemented.
 
 ## Architecture
 
@@ -29,6 +29,8 @@ pnpm dev
 The Docker services use host ports 55432 (PostgreSQL) and 56379 (Redis) to avoid common local port conflicts.
 
 For sign-up and login, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_URL` in `.env` to the same Supabase project. Enable email/password and Google in Supabase Auth, use an asymmetric JWT signing key, and allow `http://localhost:3000/auth/callback` as a redirect URL. The API verifies the provider's JWKS independently. Without this configuration, the account controls show an availability state. The login flow cannot be tested against a real provider until these values exist.
+
+Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces cannot currently be restored in the UI.
 
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
 

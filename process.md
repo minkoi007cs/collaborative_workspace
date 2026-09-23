@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 2 — Authentication (locally implemented; live provider not configured)
-Current Milestone: Verified bearer identity and user profile
-Current Branch: main (initial repository)
-Current Focus: Audit and transition to Phase 3 workspaces
-Last Completed Feature: Protected profile API and web account flows
-Current Known Issues: No Supabase project credentials; live email/Google sign-in untested; no workspaces/boards/tasks/real-time; CI has not run on GitHub
-Next Recommended Task: Implement Phase 3 workspaces, membership, RBAC, and invitations
+Current Phase: Phase 3 — Workspaces (locally implemented and tested)
+Current Milestone: Workspace membership, RBAC, invitation links, and management UI
+Current Branch: main
+Current Focus: Transition to Phase 4 projects and boards
+Last Completed Feature: Workspace creation, roles, invitation acceptance, ownership transfer, and archive
+Current Known Issues: No Supabase project credentials; live email/Google sign-in untested; no projects/boards/tasks/real-time; invitation email and archive restore absent; CI has not run on GitHub
+Next Recommended Task: Implement Phase 4 projects, boards, and columns with workspace-scoped authorization
 
 ---
 
@@ -188,3 +188,89 @@ Phase 2 code and local API tests are complete. Account UI is present but disable
 ### Next Recommended Task
 
 Implement Phase 3 workspaces, membership RBAC, and invitations with server-side authorization tests.
+
+## [2026-09-23] Change ID: PROC-003
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(workspaces): add membership and invitation flows`
+
+### Summary
+
+Implemented Phase 3 workspace creation/listing, member management, server-enforced roles, invitation links, ownership transfer, archive, and the corresponding web screens.
+
+### Reason
+
+Authenticated users needed a tenant boundary and a way to collaborate with teammates before project and task features can be built safely.
+
+### Features Added
+
+- Workspace CRUD subset, membership listing, role changes, ownership transfer, leave/remove, and archive.
+- Seven-day invitation tokens stored only as SHA-256 hashes; one-time acceptance bound to the signed-in email; pending invitation listing and revocation APIs.
+- Web workspace list/create, detail/settings, member roles, invite link, invite acceptance, and safe login continuation.
+
+### Features Modified
+
+- Account page now presents actual workspace state and empty/error states instead of planned feature cards.
+- Login/signup and OAuth callback can resume a valid invite path using a short-lived HttpOnly cookie.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema/migration; `apps/api/src/workspaces`; `apps/api/src/users/users.module.ts`; workspace integration test; `apps/web/src/app/app`, `apps/web/src/app/invite`, auth continuation helper/middleware, styles, web unit test, documentation.
+
+### Database Changes
+
+Applied `20260923020000_workspaces`: `WorkspaceRole` enum and workspace/member/invitation tables with foreign keys and indexes.
+
+### API Changes
+
+Added `/api/v1/workspaces` list/create/detail/rename/archive, member listing/role/removal/leave/ownership transfer, invitation create/list/revoke, and `/api/v1/invitations/accept`.
+
+### WebSocket Changes
+
+None; Phase 6 remains pending.
+
+### Security Impact
+
+All workspace routes require verified bearer identity and membership. Role checks run server-side; unauthorized workspace IDs return 404. Owner transfer is transactional. Invitation tokens are random, hashed at rest, time-limited, single-use, and returned with no-store cache headers. Redirect continuation allows only a token-shaped local invite path.
+
+### Tests Added or Updated
+
+- Integration test for outsider denial, viewer edit rejection, token hashing/email binding/replay rejection, owner transfer, and archive.
+- Web unit test for safe invite continuation path.
+
+### Tests Run
+
+- `pnpm db:migrate`: applied workspace migration.
+- `pnpm check`: passed (format, lint, API/web typecheck, governance and unit tests).
+- `pnpm test:integration`: passed (3 integration tests, including workspace authorization).
+- `pnpm build`: passed for API and web after stopping a dev server that was competing for Next.js `.next` output.
+- Live multi-user browser test: not run; Supabase project is not configured.
+
+### Known Problems
+
+- No projects, boards, tasks, sockets, presence, or activity yet. Invitation delivery is a manually copied link. Archive restore and hard delete are not implemented. Supabase live flow and GitHub CI remain unverified.
+
+### Technical Debt Introduced
+
+- Workspace detail page has basic forms rather than a full settings experience; revisit during UI hardening. Invitation delivery and archive restore need dedicated follow-up milestones.
+
+### Architecture Decisions
+
+- Store durable membership/invitation state in PostgreSQL. Make workspace membership the root authorization boundary. Use one-time random invitation tokens and compare against their hashes.
+
+### tech.nmd Updated?
+
+Yes; data model, API, authorization, frontend, roadmap status, and known limits updated.
+
+### Current Project State After This Change
+
+Phase 3 is locally implemented and tested. A configured Supabase project is still needed to verify browser signup/login and invite acceptance end to end. The product has no projects, boards, tasks, or live sync yet.
+
+### Next Recommended Task
+
+Implement Phase 4 projects, boards, columns, ordering, and workspace navigation with authorization tests.
