@@ -25,6 +25,7 @@ model User {
   ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
   memberships WorkspaceMember[]
   sentInvitations WorkspaceInvitation[] @relation("InvitationSender")
+  createdProjects Project[] @relation("ProjectCreator")
 
   @@map("users")
 }
@@ -43,6 +44,7 @@ model Workspace {
   owner       User     @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   members     WorkspaceMember[]
   invitations WorkspaceInvitation[]
+  projects Project[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   archivedAt  DateTime? @map("archived_at")
@@ -83,4 +85,54 @@ model WorkspaceInvitation {
 
   @@index([workspaceId, email])
   @@map("workspace_invitations")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Project {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  name        String        @db.VarChar(100)
+  description String?       @db.VarChar(2000)
+  status      ProjectStatus @default(ACTIVE)
+  createdBy   String        @map("created_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  archivedAt  DateTime?     @map("archived_at")
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User          @relation("ProjectCreator", fields: [createdBy], references: [id])
+  boards      Board[]
+
+  @@index([workspaceId, status])
+  @@map("projects")
+}
+
+model Board {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns   Column[]
+
+  @@index([projectId])
+  @@map("boards")
+}
+
+model Column {
+  id        String   @id @default(uuid()) @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, position])
+  @@map("columns")
 }

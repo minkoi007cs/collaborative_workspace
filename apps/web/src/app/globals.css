@@ -555,6 +555,59 @@ button:disabled {
 .back-link:hover {
   text-decoration: underline;
 }
+.board-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 310px);
+  gap: 16px;
+  overflow-x: auto;
+  margin-top: 32px;
+  padding: 4px 4px 20px;
+  align-items: start;
+}
+.board-column {
+  min-height: 240px;
+  padding: 20px;
+  border: 1px solid #e1e5ed;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 26px #1720330a;
+}
+.board-column-top,
+.column-move {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.board-column h2 {
+  font-size: 1.05rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.column-empty {
+  margin: 24px 0;
+  padding: 22px 14px;
+  border: 1px dashed #cad0df;
+  border-radius: 10px;
+  color: #68758b;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.column-actions {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e8ebf1;
+  padding-top: 12px;
+}
+.column-move button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.new-column {
+  background: #f9f8ff;
+  border-style: dashed;
+}
 @media (max-width: 1100px) {
   .workspace-grid {
     grid-template-columns: 1fr;

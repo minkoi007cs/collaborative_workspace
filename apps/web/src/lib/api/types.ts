@@ -28,3 +28,32 @@ export type Invitation = {
   expiresAt: string;
   createdAt: string;
 };
+
+export type BoardColumn = {
+  id: string;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Board = {
+  id: string;
+  projectId: string;
+  name: string;
+  version: number;
+  columns: BoardColumn[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Project = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  boards: Board[];
+  createdAt: string;
+  updatedAt: string;
+};

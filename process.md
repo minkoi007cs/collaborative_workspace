@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 3 — Workspaces (locally implemented and tested)
-Current Milestone: Workspace membership, RBAC, invitation links, and management UI
+Current Phase: Phase 4 — Projects and boards (locally implemented and tested)
+Current Milestone: Project/board creation and ordered column management
 Current Branch: main
-Current Focus: Transition to Phase 4 projects and boards
-Last Completed Feature: Workspace creation, roles, invitation acceptance, ownership transfer, and archive
-Current Known Issues: No Supabase project credentials; live email/Google sign-in untested; no projects/boards/tasks/real-time; invitation email and archive restore absent; CI has not run on GitHub
-Next Recommended Task: Implement Phase 4 projects, boards, and columns with workspace-scoped authorization
+Current Focus: Transition to Phase 5 task management
+Last Completed Feature: Workspace-scoped projects, boards, columns, and version-checked ordering
+Current Known Issues: No Supabase project credentials; live email/Google sign-in untested; no tasks/real-time; invitation email and archive restore absent; CI has not run on GitHub
+Next Recommended Task: Implement Phase 5 tasks, assignment, rank, and movement with concurrency tests
 
 ---
 
@@ -274,3 +274,88 @@ Phase 3 is locally implemented and tested. A configured Supabase project is stil
 ### Next Recommended Task
 
 Implement Phase 4 projects, boards, columns, ordering, and workspace navigation with authorization tests.
+
+## [2026-09-23] Change ID: PROC-004
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(projects): add boards and versioned columns`
+
+### Summary
+
+Implemented Phase 4 workspace projects, default and additional boards, editable ordered columns, and web navigation from workspace to project to board. Reviewed API ancestry, role boundaries, stale column updates, and form error handling.
+
+### Reason
+
+Teams need a concrete board structure before task work and real-time collaboration. Column order also needs an explicit conflict strategy so concurrent administrators do not silently overwrite each other.
+
+### Features Added
+
+- Project list/create/detail/update/archive; each new project starts with a main board and three columns.
+- Additional board creation and board detail; up to 20 columns per board with add, rename, reorder, and delete.
+- Workspace project list, project settings/board list, and responsive board column controls with keyboard accessible left/right movement.
+
+### Features Modified
+
+- Workspace page now shows real projects and creation controls instead of future feature copy.
+- Server action redirect logic for column movement keeps stale-version feedback separate from general save failures.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and Phase 4 migration; `apps/api/src/projects`, AppModule, integration test; `apps/web/src/app/app` project/board pages and actions, API contracts, styles, and documentation.
+
+### Database Changes
+
+Applied `20260923030000_projects_boards`: `ProjectStatus`, `projects`, `boards`, and `columns`, with workspace/project/board foreign keys and lookup/order indexes.
+
+### API Changes
+
+Added `GET/POST /workspaces/:workspaceId/projects`; `GET/PATCH/DELETE /projects/:projectId`; `GET/POST /projects/:projectId/boards`; `GET /boards/:boardId`; and column create/rename/delete/reorder routes. Column mutations require `expectedVersion`; a stale or mismatched order returns 409.
+
+### WebSocket Changes
+
+None; Phase 6 remains pending.
+
+### Security Impact
+
+Project and board requests resolve their workspace lineage in the API before checking membership and role. Outsiders get 404 and viewers cannot mutate. Only owner/admin may create or modify projects, boards, and columns. Archived projects and workspaces cannot serve board operations.
+
+### Tests Added or Updated
+
+- Integration test covers default board creation, outsider denial, viewer read/write boundaries, stale column version rejection, reorder validation, and project archive behavior.
+
+### Tests Run
+
+- `pnpm db:migrate`: applied Phase 4 migration locally.
+- `pnpm check`: passed (format, lint, typecheck, unit/governance tests; lint emitted two optional-chain style warnings, then fixed).
+- `pnpm test:integration`: passed (4 tests, including project/board RBAC and versioning).
+- `pnpm build`: passed for API and web.
+- Authenticated browser journey: not run; Supabase project remains unconfigured.
+
+### Known Problems
+
+- Boards have columns but no tasks yet. Project/board authenticated screens await live UI verification. Supabase login, invitation delivery, archive restore, GitHub CI, and production deployment remain incomplete.
+
+### Technical Debt Introduced
+
+- Column reorder rewrites each position inside a serializable transaction, acceptable at the 20-column limit. Task ordering will use a separate rank scheme. Project/board settings use basic server forms and need broader UI review once login can run.
+
+### Architecture Decisions
+
+- Project and board IDs do not grant authorization on their own; membership is checked through server-resolved workspace lineage. Board `version` uses compare-and-swap for all column mutations and returns canonical state.
+
+### tech.nmd Updated?
+
+Yes; architecture, data model, API, concurrency, tests, current phase, and known issues updated.
+
+### Current Project State After This Change
+
+Phase 4 is locally implemented and tested. Users with a configured Supabase project can create workspaces, projects, and boards and manage columns. No tasks or real-time sync exist yet.
+
+### Next Recommended Task
+
+Implement Phase 5 tasks, assignment, task rank/movement, and board task UI with concurrency tests.

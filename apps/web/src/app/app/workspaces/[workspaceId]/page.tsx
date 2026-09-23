@@ -1,8 +1,15 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ApiError, apiRequest } from '@/lib/api/server';
-import type { Invitation, Member, Profile, Workspace } from '@/lib/api/types';
+import type {
+  Invitation,
+  Member,
+  Profile,
+  Project,
+  Workspace,
+} from '@/lib/api/types';
 import { SignOutButton } from '../../sign-out-button';
+import { createProject } from '../../project-actions';
 import {
   archiveWorkspace,
   changeMemberRole,
@@ -27,11 +34,13 @@ export default async function WorkspacePage({
   let workspace: Workspace;
   let members: Member[];
   let profile: Profile;
+  let projects: Project[];
   try {
-    [workspace, members, profile] = await Promise.all([
+    [workspace, members, profile, projects] = await Promise.all([
       apiRequest<Workspace>(`/workspaces/${workspaceId}`),
       apiRequest<Member[]>(`/workspaces/${workspaceId}/members`),
       apiRequest<Profile>('/users/me'),
+      apiRequest<Project[]>(`/workspaces/${workspaceId}/projects`),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login');
@@ -79,8 +88,7 @@ export default async function WorkspacePage({
             </p>
             <h1>{workspace.name}</h1>
             <p className="lede">
-              Bring your teammates together. Projects and boards are coming in
-              the next milestone.
+              Organize your team’s work into projects and boards.
             </p>
           </div>
           <SignOutButton />
@@ -100,6 +108,67 @@ export default async function WorkspacePage({
             That change could not be saved. Please refresh and try again.
           </p>
         )}
+        <section className="banner" aria-labelledby="projects-title">
+          <h2 id="projects-title">Projects</h2>
+          {projects.length === 0 ? (
+            <div className="empty-state">
+              <strong>No projects yet</strong>
+              <p>Create a project to give your team a shared board.</p>
+            </div>
+          ) : (
+            <ul className="workspace-list">
+              {projects.map((project) => (
+                <li key={project.id}>
+                  <Link
+                    className="workspace-link"
+                    href={`/app/projects/${project.id}`}
+                  >
+                    <span className="workspace-initial" aria-hidden="true">
+                      {project.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span>
+                      <strong>{project.name}</strong>
+                      <small>
+                        {project.boards.length}{' '}
+                        {project.boards.length === 1 ? 'board' : 'boards'}
+                        {project.description ? ` · ${project.description}` : ''}
+                      </small>
+                    </span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManage && (
+            <form
+              action={createProject}
+              className="inline-form create-workspace"
+            >
+              <input type="hidden" name="workspaceId" value={workspaceId} />
+              <label htmlFor="project-name">New project</label>
+              <input
+                id="project-name"
+                name="name"
+                placeholder="Product launch"
+                maxLength={100}
+                required
+              />
+              <label htmlFor="project-description">
+                Description (optional)
+              </label>
+              <input
+                id="project-description"
+                name="description"
+                placeholder="What is this project for?"
+                maxLength={2000}
+              />
+              <button className="primary-button" type="submit">
+                Create project
+              </button>
+            </form>
+          )}
+        </section>
         <div className="workspace-grid">
           <section
             className="banner workspace-section"
