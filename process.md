@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 4 — Projects and boards (locally implemented and tested)
-Current Milestone: Project/board creation and ordered column management
+Current Phase: Phase 5 — Tasks (locally implemented and tested)
+Current Milestone: Task editing, assignment, labels, rank-based movement, and board interactions
 Current Branch: main
-Current Focus: Transition to Phase 5 task management
-Last Completed Feature: Workspace-scoped projects, boards, columns, and version-checked ordering
-Current Known Issues: No Supabase project credentials; live email/Google sign-in untested; no tasks/real-time; invitation email and archive restore absent; CI has not run on GitHub
-Next Recommended Task: Implement Phase 5 tasks, assignment, rank, and movement with concurrency tests
+Current Focus: Transition to Phase 6 authenticated real-time delivery
+Last Completed Feature: Task CRUD, assignment, labels, ordering, copy/archive/delete, and optimistic board movement
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no real-time/presence/comments/activity; invitation email and archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Implement Phase 6 authenticated Socket.IO events and board reconciliation
 
 ---
 
@@ -359,3 +359,90 @@ Phase 4 is locally implemented and tested. Users with a configured Supabase proj
 ### Next Recommended Task
 
 Implement Phase 5 tasks, assignment, task rank/movement, and board task UI with concurrency tests.
+
+## [2026-09-23] Change ID: PROC-005
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(tasks): add ranked tasks and board movement`
+
+### Summary
+
+Implemented Phase 5 task management and board interaction: task creation/editing, priority, due date, completion, assignments, labels, copy, archive, permanent admin deletion, rank-based movement, and an optimistic drag-and-drop UI with keyboard movement controls.
+
+### Reason
+
+The Phase 4 board contained columns but no work items. Tasks needed server-checked ancestry, role limits, membership-safe assignment, and predictable behavior when two users edit at once.
+
+### Features Added
+
+- Task API with cursor-paginated board list, detail, versioned edits, movement, assignment/label replacement, copy, archive, and admin permanent deletion.
+- Project labels; task priority, due date, completion and description; 18-digit lexicographic rank tokens with midpoint insertion and transactional rebalance.
+- Board task cards with drag/drop, immediate visual movement, rollback on server rejection, keyboard arrows, and detail forms for editing and assigning.
+- Column deletion guard when any task remains in the column; member removal/leave clears that member's task assignments transactionally.
+
+### Features Modified
+
+- Invitation acceptance retries retryable PostgreSQL serializable conflicts, observed when integration suites ran concurrently on unrelated workspaces.
+- Board empty state and errors now reflect actual tasks and occupied-column cases.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and Phase 5 migration; `apps/api/src/tasks`, projects column removal, workspace membership removal and acceptance; task/rank integration and unit tests; `apps/web/src/app/app` task page/actions and board interaction component, API contracts, styles, and documentation.
+
+### Database Changes
+
+Applied `20260923040000_tasks`: `TaskPriority`, tasks, task assignees, project labels, and task labels. Task column and board must match through a composite foreign key. Task rank is unique within a column. The task-to-column foreign key restricts deleting a column that still contains tasks, including archived ones.
+
+### API Changes
+
+Added `GET/POST /boards/:boardId/tasks`, `GET/PATCH/DELETE /tasks/:taskId`, `POST /tasks/:taskId/move`, `POST /tasks/:taskId/copy`, `DELETE /tasks/:taskId/permanent`, `PUT /tasks/:taskId/assignees`, `PUT /tasks/:taskId/labels`, and `GET/POST /projects/:projectId/labels`. Board task list pages contain at most 100 tasks and a cursor. Mutations return canonical task state where applicable.
+
+### WebSocket Changes
+
+None; Phase 6 remains pending. Drag/drop currently refetches the board after REST success.
+
+### Security Impact
+
+Task access resolves board/project/workspace lineage and requires membership. Editors and above can mutate tasks; only admins/owners permanently delete. Assignees must be current workspace members; labels must belong to the task's project. The database prevents cross-board task/column pairs. Token validation remains independent of browser state.
+
+### Tests Added or Updated
+
+- Task integration test covers outsider/viewer denial, invalid target column, stale version, movement and rank order, cursor, assignment membership, labels, column deletion, copy, hard delete, archive, and membership assignment cleanup.
+- Unit test covers rank midpoint ordering and exhausted gaps.
+
+### Tests Run
+
+- `pnpm db:migrate`: applied Phase 5 migration locally.
+- `pnpm check`: passed (format, lint, typecheck, governance/unit tests).
+- `pnpm test:integration`: passed (5 tests) in repeated runs after retry fix.
+- `pnpm build`: passed for API and web after task page and board interaction additions.
+- Authenticated browser drag/drop: not run because live Supabase configuration is absent.
+
+### Known Problems
+
+- No socket delivery, multi-user browser reconciliation, presence, comments, activity, notifications, files, or search. The board UI loads up to 1,000 tasks across ten API pages; larger boards need a stronger virtualized/paged view. Authenticated UI visuals and live provider flows remain unverified.
+
+### Technical Debt Introduced
+
+- Board task drag/drop uses native HTML drag events and one in-flight optimistic move; it has a keyboard arrow alternative but needs multi-user socket reconciliation and accessibility review with live accounts. Rebalance is rare but updates every rank in a crowded column inside a serializable transaction. Archived tasks retain their ranks and block column deletion until permanently deleted or relocated. Task list pagination is capped in the current board view.
+
+### Architecture Decisions
+
+- Use 18-digit zero-padded rank strings so lexicographic database order matches numeric order; assign midpoints for normal moves and rebalance only when no gap exists. Use per-task compare-and-swap `version` with 409 conflicts. Keep REST authoritative; client movement is provisional until the server confirms.
+
+### tech.nmd Updated?
+
+Yes; task data model, API, authorization, concurrency, UI, current status, and technical debt updated.
+
+### Current Project State After This Change
+
+Phases 0–5 are locally implemented and tested. Main branch has been pushed through Phase 4; this Phase 5 commit will be pushed after checks. The product supports workspaces, projects, boards, and tasks with RBAC, but still lacks the real-time collaboration core and configured live Supabase.
+
+### Next Recommended Task
+
+Implement Phase 6 authenticated Socket.IO events, authorized rooms, and client board refresh on relevant events.

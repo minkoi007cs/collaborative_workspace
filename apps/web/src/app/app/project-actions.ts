@@ -150,6 +150,8 @@ export async function removeColumn(form: FormData) {
       body: JSON.stringify({ expectedVersion }),
     });
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409)
+      redirect(`${path}?error=column-occupied`);
     fail(error, path);
   }
   revalidatePath(path);

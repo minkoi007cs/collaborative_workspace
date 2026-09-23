@@ -17,5 +17,6 @@ import { ProjectsService } from './projects.service';
     BoardsController,
   ],
   providers: [ProjectsService],
+  exports: [ProjectsService],
 })
 export class ProjectsModule {}

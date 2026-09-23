@@ -205,8 +205,31 @@ export class WorkspacesService {
     if (!membership) throw new NotFoundException('Member not found');
     if (membership.role === WorkspaceRole.OWNER)
       throw new ForbiddenException('Cannot remove owner');
-    await this.prisma.workspaceMember.delete({ where: { id: memberId } });
+    await this.removeMembership(workspaceId, membership.userId);
     return { removed: true };
+  }
+
+  private async removeMembership(workspaceId: string, userId: string) {
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.taskAssignee.deleteMany({
+            where: { userId, task: { board: { project: { workspaceId } } } },
+          });
+          await tx.workspaceMember.delete({
+            where: { workspaceId_userId: { workspaceId, userId } },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2034'
+      )
+        throw new ConflictException('Membership changed concurrently');
+      throw error;
+    }
   }
 
   async archive(identity: AuthIdentity, workspaceId: string) {
@@ -238,50 +261,53 @@ export class WorkspacesService {
       throw new ForbiddenException('Invitation belongs to another account');
     }
     const userId = await this.userId(identity);
-    try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const claimed = await tx.workspaceInvitation.updateMany({
-            where: {
-              id: invitation.id,
-              acceptedAt: null,
-              revokedAt: null,
-              expiresAt: { gt: new Date() },
-            },
-            data: { acceptedAt: new Date() },
-          });
-          if (claimed.count !== 1)
-            throw new ConflictException('Invitation already used');
-          await tx.workspaceMember.create({
-            data: {
-              workspaceId: invitation.workspaceId,
-              userId,
-              role: invitation.role,
-            },
-          });
-          return tx.workspace.findUniqueOrThrow({
-            where: { id: invitation.workspaceId },
-            select: workspaceSelect,
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-    } catch (error) {
-      if (error instanceof ConflictException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException('Already a workspace member');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            const claimed = await tx.workspaceInvitation.updateMany({
+              where: {
+                id: invitation.id,
+                acceptedAt: null,
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+              },
+              data: { acceptedAt: new Date() },
+            });
+            if (claimed.count !== 1)
+              throw new ConflictException('Invitation already used');
+            await tx.workspaceMember.create({
+              data: {
+                workspaceId: invitation.workspaceId,
+                userId,
+                role: invitation.role,
+              },
+            });
+            return tx.workspace.findUniqueOrThrow({
+              where: { id: invitation.workspaceId },
+              select: workspaceSelect,
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (error instanceof ConflictException) throw error;
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        )
+          throw new ConflictException('Already a workspace member');
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        ) {
+          if (attempt < 2) continue;
+          throw new ConflictException('Invitation was updated concurrently');
+        }
+        throw error;
       }
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2034'
-      ) {
-        throw new ConflictException('Invitation was updated concurrently');
-      }
-      throw error;
     }
+    throw new ConflictException('Invitation was updated concurrently');
   }
 
   async transferOwnership(
@@ -338,9 +364,7 @@ export class WorkspacesService {
     const membership = await this.access.require(workspaceId, userId);
     if (membership.role === WorkspaceRole.OWNER)
       throw new ForbiddenException('Transfer ownership before leaving');
-    await this.prisma.workspaceMember.delete({
-      where: { workspaceId_userId: { workspaceId, userId } },
-    });
+    await this.removeMembership(workspaceId, userId);
     return { left: true };
   }
 }

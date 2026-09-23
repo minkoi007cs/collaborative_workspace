@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a planned real-time workspace and task collaboration platform. The repository currently contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, and Phase 4 projects and boards. Collaborative tasks and live sync are not yet implemented.
+SyncSpace is a planned real-time workspace and task collaboration platform. The repository currently contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, and Phase 5 task management. Live collaboration is the next milestone.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ The Docker services use host ports 55432 (PostgreSQL) and 56379 (Redis) to avoid
 
 For sign-up and login, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_URL` in `.env` to the same Supabase project. Enable email/password and Google in Supabase Auth, use an asymmetric JWT signing key, and allow `http://localhost:3000/auth/callback` as a redirect URL. The API verifies the provider's JWKS independently. Without this configuration, the account controls show an availability state. The login flow cannot be tested against a real provider until these values exist.
 
-Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Workspace owners and admins can create projects, add boards, and manage ordered columns. Column changes detect stale board versions and ask the user to refresh. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces and projects cannot currently be restored in the UI.
+Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Workspace owners and admins can create projects, add boards, and manage ordered columns. Editors and above can create and edit tasks, assign workspace members, add labels, set priority/due date, copy/archive tasks, and move them by drag/drop or keyboard controls. Task and column changes detect stale versions. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces and projects cannot currently be restored in the UI.
 
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
 

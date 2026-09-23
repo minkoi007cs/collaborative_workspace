@@ -57,3 +57,30 @@ export type Project = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type Task = {
+  id: string;
+  boardId: string;
+  columnId: string;
+  title: string;
+  description: string | null;
+  rank: string;
+  priority: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  dueAt: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  assignees: Array<{
+    user: { id: string; displayName: string; email: string };
+  }>;
+  labels: Array<{ label: { id: string; name: string; color: string } }>;
+};
+
+export type TaskPage = { items: Task[]; nextCursor: string | null };
+export type TaskLabel = {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+};

@@ -26,6 +26,8 @@ model User {
   memberships WorkspaceMember[]
   sentInvitations WorkspaceInvitation[] @relation("InvitationSender")
   createdProjects Project[] @relation("ProjectCreator")
+  createdTasks Task[] @relation("TaskCreator")
+  taskAssignments TaskAssignee[]
 
   @@map("users")
 }
@@ -105,6 +107,7 @@ model Project {
   workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   creator     User          @relation("ProjectCreator", fields: [createdBy], references: [id])
   boards      Board[]
+  labels      Label[]
 
   @@index([workspaceId, status])
   @@map("projects")
@@ -119,6 +122,7 @@ model Board {
   updatedAt DateTime @updatedAt @map("updated_at")
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   columns   Column[]
+  tasks     Task[]
 
   @@index([projectId])
   @@map("boards")
@@ -132,7 +136,80 @@ model Column {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks     Task[]
 
+  @@unique([id, boardId])
   @@index([boardId, position])
   @@map("columns")
+}
+
+enum TaskPriority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id          String        @id @default(uuid()) @db.Uuid
+  boardId     String        @map("board_id") @db.Uuid
+  columnId    String        @map("column_id") @db.Uuid
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  rank        String        @db.VarChar(18)
+  priority    TaskPriority  @default(NONE)
+  dueAt       DateTime?     @map("due_at")
+  createdBy   String        @map("created_by") @db.Uuid
+  version     Int           @default(1)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  completedAt DateTime?     @map("completed_at")
+  archivedAt  DateTime?     @map("archived_at")
+  board       Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column      Column        @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: Restrict)
+  creator     User          @relation("TaskCreator", fields: [createdBy], references: [id])
+  assignees   TaskAssignee[]
+  labels      TaskLabel[]
+
+  @@unique([columnId, rank])
+  @@index([boardId, archivedAt])
+  @@index([columnId, rank])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId     String   @map("task_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+model Label {
+  id        String      @id @default(uuid()) @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  name      String      @db.VarChar(50)
+  color     String      @db.VarChar(7)
+  createdAt DateTime    @default(now()) @map("created_at")
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     TaskLabel[]
+
+  @@unique([projectId, name])
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId  String @map("task_id") @db.Uuid
+  labelId String @map("label_id") @db.Uuid
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+  @@map("task_labels")
 }

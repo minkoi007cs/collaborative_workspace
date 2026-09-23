@@ -61,7 +61,7 @@ export class ProjectsService {
     return (await this.users.getOrCreate(identity)).id;
   }
 
-  private async requireProject(
+  async requireProject(
     identity: AuthIdentity,
     projectId: string,
     minimum: WorkspaceRole = WorkspaceRole.VIEWER,
@@ -80,7 +80,7 @@ export class ProjectsService {
     return project;
   }
 
-  private async requireBoard(
+  async requireBoard(
     identity: AuthIdentity,
     boardId: string,
     minimum: WorkspaceRole = WorkspaceRole.VIEWER,
@@ -278,6 +278,11 @@ export class ProjectsService {
     expectedVersion: number,
   ) {
     return this.mutateBoard(identity, boardId, expectedVersion, async (tx) => {
+      const tasks = await tx.task.count({ where: { boardId, columnId } });
+      if (tasks > 0)
+        throw new ConflictException(
+          'Move or delete tasks before removing this column',
+        );
       const removed = await tx.column.deleteMany({
         where: { id: columnId, boardId },
       });
