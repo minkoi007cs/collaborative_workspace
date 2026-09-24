@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 13 — Scoped task search (locally implemented and tested; Phase 12 attachments and Phase 11 email delivery pending)
-Current Milestone: Indexed task search with workspace authorization and useful filters
+Current Phase: Phase 14 — Security/performance/accessibility hardening (in progress; Phase 12 attachments and Phase 11 email delivery pending)
+Current Milestone: Invitation abuse limits and basic browser response protections
 Current Branch: main
-Current Focus: Phase 12 private attachments and Phase 14 hardening
-Last Completed Feature: Workspace-scoped task search with PostgreSQL full-text index, filters, and pagination
+Current Focus: Continue Phase 14 hardening and Phase 12 private attachments
+Last Completed Feature: Redis invitation limits, clearer 429/503 UX, and browser security headers
 Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Configure private object storage for Phase 12 attachments or continue Phase 14 security/performance/accessibility hardening
+Next Recommended Task: Review API security/performance/accessibility gaps and configure private object storage for Phase 12 attachments
 
 ---
 
@@ -1134,3 +1134,88 @@ Phases 0–10, Phase 11 inbox/core alerts/reminders, and Phase 13 task search ar
 ### Next Recommended Task
 
 Configure private object storage for Phase 12 or continue Phase 14 security/performance/accessibility hardening.
+
+## [2026-09-24] Change ID: PROC-014
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(security): throttle invitations and set browser headers`
+
+### Summary
+
+Started Phase 14 hardening with Redis-backed limits for invitation creation and acceptance, clearer user feedback for 429/503 responses, and basic browser security headers on web/API responses.
+
+### Reason
+
+High-entropy invitation tokens still need an abuse boundary to protect database load. Browsers should receive explicit framing, MIME, referrer, and device-permission policies.
+
+### Features Added
+
+- Atomic fixed-window Redis counters: 20 invitation creations per verified account/workspace/hour and 10 token acceptance attempts per verified account/five minutes.
+- HTTP 429 for excess requests; invitation routes return 503 if Redis cannot enforce their limit.
+- Web and API headers for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`.
+- UI feedback distinguishes rate limit and temporary invitation-service failure.
+
+### Features Modified
+
+- Invitation controllers check limits after input validation and before the underlying operation.
+- README, architecture spec, audit, and current status describe these controls.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- New rate-limit API module, AppModule, workspace/invitation controllers, API bootstrap, workspace integration test, Next config, web invitation actions/dashboard, README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+- None. Counters are ephemeral Redis keys.
+
+### API Changes
+
+Invitation create/accept can now return 429 or 503. All other response shapes are unchanged.
+
+### WebSocket Changes
+
+- None.
+
+### Security Impact
+
+Counters use the verified JWT subject, with workspace scope for link creation, and are atomic across API instances. Redis failure blocks these sensitive routes rather than allowing unlimited attempts. Browser headers reduce MIME sniffing, framing, referrer exposure, and accidental device permission use. This does not replace a full CSP or deployment review.
+
+### Tests Added or Updated
+
+- Workspace integration suite sends ten invalid token attempts and verifies the eleventh returns 429.
+
+### Tests Run
+
+- Full serial API integration suite: 6/6 passed after rate-limit wiring.
+- Biome format/lint, API/web TypeScript, API production build, and Next.js production build: passed.
+- Local web and API servers returned HTTP 200 with all four security headers verified using HEAD requests.
+- Desktop login page visually inspected at localhost:3100; account fields are disabled without Supabase configuration. Authenticated UI remains untested.
+
+### Known Problems
+
+Fixed windows allow a burst across a window boundary; Redis is required for invitation actions. The app has no CSP yet. Phase 12 attachments, invitation email delivery, live auth QA, and production deployment remain.
+
+### Technical Debt Introduced
+
+The rate-limit service opens its own Redis connection; a shared Redis provider could reduce connections. Limits are by account, so a distributed attacker with many accounts could still generate load; add IP/network controls at the edge during deployment.
+
+### Architecture Decisions
+
+Redis Lua performs increment and expiry atomically. Invitation routes fail closed when enforcement is unavailable. Header policy avoids a speculative CSP that could break OAuth or WebSocket until their live origin configuration can be tested.
+
+### tech.nmd Updated?
+
+Yes; Redis, security requirements, and current status updated.
+
+### Current Project State After This Change
+
+Phase 14 hardening is underway. Phases 0–10, Phase 11 inbox/alerts/reminders, and Phase 13 task search remain locally tested. Phase 12 private attachments and Phase 11 invitation email delivery remain open.
+
+### Next Recommended Task
+
+Audit remaining API security/performance/accessibility risks and configure private object storage for attachments.

@@ -86,7 +86,11 @@ export default async function AppPage({
           <p className="form-message" role="alert">
             {params.inviteError === 'email'
               ? 'Sign in with the email address on the invitation.'
-              : 'This invitation is invalid, expired, or already used.'}
+              : params.inviteError === 'limited'
+                ? 'Too many invitation attempts. Try again in a few minutes.'
+                : params.inviteError === 'unavailable'
+                  ? 'Invitation service is temporarily unavailable.'
+                  : 'This invitation is invalid, expired, or already used.'}
           </p>
         )}
         <section className="banner" aria-labelledby="workspaces-title">

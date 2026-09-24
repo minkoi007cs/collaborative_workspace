@@ -144,7 +144,11 @@ export async function createInvitation(
       error:
         error instanceof ApiError && error.status === 403
           ? 'Your role cannot invite this member.'
-          : 'Could not create invitation.',
+          : error instanceof ApiError && error.status === 429
+            ? 'Too many invitation attempts. Try again in a few minutes.'
+            : error instanceof ApiError && error.status === 503
+              ? 'Invitation service is temporarily unavailable.'
+              : 'Could not create invitation.',
     };
   }
 }
@@ -162,7 +166,13 @@ export async function acceptInvitation(form: FormData) {
   } catch (error) {
     redirectIfUnauthenticated(error);
     const code =
-      error instanceof ApiError && error.status === 403 ? 'email' : 'invalid';
+      error instanceof ApiError && error.status === 403
+        ? 'email'
+        : error instanceof ApiError && error.status === 429
+          ? 'limited'
+          : error instanceof ApiError && error.status === 503
+            ? 'unavailable'
+            : 'invalid';
     redirect(`/app?inviteError=${code}`);
   }
   revalidatePath('/app');

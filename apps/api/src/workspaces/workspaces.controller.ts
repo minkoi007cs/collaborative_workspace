@@ -17,6 +17,7 @@ import { ActivityType, WorkspaceRole } from '@prisma/client';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { ActivityService } from '../activity/activity.service';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { WorkspacesService } from './workspaces.service';
@@ -54,6 +55,7 @@ export class WorkspacesController {
   constructor(
     @Inject(WorkspacesService) private readonly workspaces: WorkspacesService,
     @Inject(ActivityService) private readonly activity: ActivityService,
+    @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
   ) {}
 
   @Get()
@@ -227,6 +229,13 @@ export class WorkspacesController {
     response.setHeader('Cache-Control', 'private, no-store');
     const input = parse(inviteSchema, body);
     const auth = identity(request);
+    await this.rateLimit.check(
+      auth,
+      'invite-create',
+      20,
+      60 * 60 * 1000,
+      workspaceId,
+    );
     const invitation = await this.workspaces.invite(
       auth,
       workspaceId,
@@ -280,13 +289,14 @@ export class WorkspacesController {
 export class InvitationsController {
   constructor(
     @Inject(WorkspacesService) private readonly workspaces: WorkspacesService,
+    @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
   ) {}
 
   @Post('accept')
-  accept(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
-    return this.workspaces.accept(
-      identity(request),
-      parse(acceptSchema, body).token,
-    );
+  async accept(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    const auth = identity(request);
+    const input = parse(acceptSchema, body);
+    await this.rateLimit.check(auth, 'invite-accept', 10, 5 * 60 * 1000);
+    return this.workspaces.accept(auth, input.token);
   }
 }

@@ -10,6 +10,7 @@ import { CommentsModule } from './comments/comments.module';
 import { ActivityModule } from './activity/activity.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SearchModule } from './search/search.module';
+import { RateLimitModule } from './rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SearchModule } from './search/search.module';
     ActivityModule,
     NotificationsModule,
     SearchModule,
+    RateLimitModule,
   ],
 })
 export class AppModule {}

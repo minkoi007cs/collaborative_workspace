@@ -42,6 +42,8 @@ Task and workspace pages show a paginated activity feed with the actor, action, 
 
 Workspace pages link to task search. Search matches task titles and descriptions through a PostgreSQL full-text index, can filter by project, assignee, and priority, and returns only active tasks in the signed-in member's workspace. Results are paginated at 20 per page.
 
+Invitation creation and token acceptance have per-account Redis limits. Requests over the limit return HTTP 429, and the invitation routes return 503 if Redis cannot enforce the limit. Web and API responses set basic browser security headers. The API's CORS origin must match `WEB_ORIGIN`.
+
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
 If the web server uses another port, set `WEB_ORIGIN` to that exact browser origin so REST and Socket.IO connections are accepted.
 

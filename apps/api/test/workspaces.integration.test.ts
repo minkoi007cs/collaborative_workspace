@@ -216,6 +216,24 @@ test('workspace roles, invitation acceptance, ownership, and archive are enforce
       (await send(`/workspaces/${workspace.id}`, owner)).status,
       404,
     );
+    for (let attempt = 0; attempt < 10; attempt++) {
+      assert.equal(
+        (
+          await send('/invitations/accept', owner, 'POST', {
+            token: 'x'.repeat(43),
+          })
+        ).status,
+        404,
+      );
+    }
+    assert.equal(
+      (
+        await send('/invitations/accept', owner, 'POST', {
+          token: 'x'.repeat(43),
+        })
+      ).status,
+      429,
+    );
   } finally {
     if (workspaceId)
       await prisma.workspace.deleteMany({ where: { id: workspaceId } });

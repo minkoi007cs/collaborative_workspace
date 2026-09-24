@@ -93,7 +93,7 @@ For task moves, snapshot the board task list, apply an immediate local change, s
 
 ## 21. Redis Architecture
 
-Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; Phase 9 typing uses a short in-process timer; later phases may move rate-limit state and typing to Redis and add the Socket.IO Redis adapter. PostgreSQL remains business truth. Redis outage fails readiness and makes the online indicator unavailable while board REST and socket events continue on a single API instance.
+Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; Phase 9 typing uses a short in-process timer. Phase 14 uses Redis fixed-window counters for invitation create/accept limits across API instances. The Socket.IO Redis adapter remains planned. PostgreSQL remains business truth. Redis outage fails readiness, makes presence unavailable, and causes invitation routes to return 503 because their abuse limits cannot be enforced; other board REST and socket events continue on a single API instance.
 
 ## 22. File Storage Architecture
 
@@ -109,7 +109,7 @@ Phase 13 task search uses a PostgreSQL GIN index on a `simple` full-text documen
 
 ## 25. Security Requirements
 
-Validate all API inputs; verify auth server-side; enforce RBAC on REST and sockets; escape/render comments safely; hash invitation tokens; rate limit sensitive routes; use secure headers and least-privilege secrets. Bound upload size and type. Audit privileged actions. Do not leak membership through errors or events. Production CORS must be explicit.
+Validate all API inputs; verify auth server-side; enforce RBAC on REST and sockets; escape/render comments safely; hash invitation tokens; rate limit sensitive routes; use secure headers and least-privilege secrets. Phase 14 limits invitation creation to 20 per account/workspace/hour and token acceptance to 10 per account/five minutes with atomic Redis counters, returning 429 on excess and 503 when Redis is unavailable. Web and API set `nosniff`, frame denial, referrer, and camera/microphone/geolocation policy headers. Bound upload size and type when files arrive. Audit privileged actions. Do not leak membership through errors or events. Production CORS is restricted to `WEB_ORIGIN`.
 
 ## 26. Performance Requirements
 
@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phases 0–10, Phase 11 inbox/core notification events/due reminders, and Phase 13 task search are locally implemented and tested using mock JWKS. Phase 12 private attachments and Phase 11 invitation email delivery remain open. Live Supabase/Google flows need project configuration. The first GitHub Actions run still needs review. See `process.md` for exact results.
+Phases 0–10, Phase 11 inbox/core notification events/due reminders, Phase 13 task search, and part of Phase 14 security hardening are locally implemented and tested using mock JWKS. Phase 12 private attachments and Phase 11 invitation email delivery remain open. Live Supabase/Google flows need project configuration. The first GitHub Actions run still needs review. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 
