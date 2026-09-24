@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ApiError, apiRequest } from '@/lib/api/server';
 import type {
+  ActivityEvent,
+  ActivityPage,
   Invitation,
   Member,
   Profile,
@@ -9,6 +11,7 @@ import type {
   Workspace,
 } from '@/lib/api/types';
 import { SignOutButton } from '../../sign-out-button';
+import { ActivityFeed } from '../../activity-feed';
 import { createProject } from '../../project-actions';
 import {
   archiveWorkspace,
@@ -26,7 +29,12 @@ export default async function WorkspacePage({
   searchParams,
 }: {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ error?: string; updated?: string; joined?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    updated?: string;
+    joined?: string;
+    activityPages?: string;
+  }>;
 }) {
   const { workspaceId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(workspaceId)) notFound();
@@ -61,6 +69,29 @@ export default async function WorkspacePage({
         `/workspaces/${workspaceId}/invitations`,
       ).catch(() => [])
     : [];
+  const activityPages = Math.min(
+    Math.max(Number(notices.activityPages) || 1, 1),
+    10,
+  );
+  const activity: ActivityEvent[] = [];
+  let nextActivityCursor: string | null = null;
+  let activityUnavailable = false;
+  try {
+    const first = await apiRequest<ActivityPage>(
+      `/workspaces/${workspaceId}/activity`,
+    );
+    activity.push(...first.items);
+    nextActivityCursor = first.nextCursor;
+    for (let page = 1; page < activityPages && nextActivityCursor; page++) {
+      const next: ActivityPage = await apiRequest<ActivityPage>(
+        `/workspaces/${workspaceId}/activity?cursor=${nextActivityCursor}`,
+      );
+      activity.push(...next.items);
+      nextActivityCursor = next.nextCursor;
+    }
+  } catch {
+    activityUnavailable = true;
+  }
 
   return (
     <div className="shell">
@@ -307,6 +338,16 @@ export default async function WorkspacePage({
             )}
           </section>
         )}
+        <ActivityFeed
+          title="Workspace activity"
+          events={activity}
+          unavailable={activityUnavailable}
+          moreHref={
+            nextActivityCursor && activityPages < 10
+              ? `/app/workspaces/${workspaceId}?activityPages=${activityPages + 1}`
+              : undefined
+          }
+        />
       </main>
     </div>
   );

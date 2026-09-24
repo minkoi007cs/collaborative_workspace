@@ -13,9 +13,10 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { WorkspaceRole } from '@prisma/client';
+import { ActivityType, WorkspaceRole } from '@prisma/client';
 import type { Response } from 'express';
 import { z } from 'zod';
+import { ActivityService } from '../activity/activity.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { WorkspacesService } from './workspaces.service';
@@ -52,6 +53,7 @@ function identity(request: AuthenticatedRequest): AuthIdentity {
 export class WorkspacesController {
   constructor(
     @Inject(WorkspacesService) private readonly workspaces: WorkspacesService,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get()
@@ -60,11 +62,21 @@ export class WorkspacesController {
   }
 
   @Post()
-  create(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
-    return this.workspaces.create(
-      identity(request),
+  async create(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    const auth = identity(request);
+    const workspace = await this.workspaces.create(
+      auth,
       parse(nameSchema, body).name,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspace.id,
+      'workspace',
+      workspace.id,
+      ActivityType.WORKSPACE_CREATED,
+      { name: workspace.name },
+    );
+    return workspace;
   }
 
   @Get(':workspaceId')
@@ -76,16 +88,26 @@ export class WorkspacesController {
   }
 
   @Patch(':workspaceId')
-  rename(
+  async rename(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() body: unknown,
   ) {
-    return this.workspaces.rename(
-      identity(request),
+    const auth = identity(request);
+    const workspace = await this.workspaces.rename(
+      auth,
       workspaceId,
       parse(nameSchema, body).name,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'workspace',
+      workspaceId,
+      ActivityType.WORKSPACE_RENAMED,
+      { name: workspace.name },
+    );
+    return workspace;
   }
 
   @Get(':workspaceId/members')
@@ -97,22 +119,32 @@ export class WorkspacesController {
   }
 
   @Patch(':workspaceId/members/:memberId')
-  changeRole(
+  async changeRole(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Param('memberId', ParseUUIDPipe) memberId: string,
     @Body() body: unknown,
   ) {
-    return this.workspaces.changeRole(
-      identity(request),
+    const auth = identity(request);
+    const member = await this.workspaces.changeRole(
+      auth,
       workspaceId,
       memberId,
       parse(roleSchema, body).role,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'member',
+      memberId,
+      ActivityType.MEMBER_ROLE_CHANGED,
+      { role: member.role },
+    );
+    return member;
   }
 
   @Post(':workspaceId/transfer-ownership')
-  transferOwnership(
+  async transferOwnership(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() body: unknown,
@@ -121,32 +153,60 @@ export class WorkspacesController {
       z.object({ memberId: z.string().uuid() }).strict(),
       body,
     );
-    return this.workspaces.transferOwnership(
-      identity(request),
+    const auth = identity(request);
+    const result = await this.workspaces.transferOwnership(
+      auth,
       workspaceId,
       input.memberId,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'workspace',
+      workspaceId,
+      ActivityType.OWNER_TRANSFERRED,
+      { memberId: input.memberId },
+    );
+    return result;
   }
 
   @Delete(':workspaceId/members/me')
-  leave(
+  async leave(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
   ) {
-    return this.workspaces.leave(identity(request), workspaceId);
+    const auth = identity(request);
+    const result = await this.workspaces.leave(auth, workspaceId);
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'workspace',
+      workspaceId,
+      ActivityType.MEMBER_REMOVED,
+    );
+    return result;
   }
 
   @Delete(':workspaceId/members/:memberId')
-  removeMember(
+  async removeMember(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Param('memberId', ParseUUIDPipe) memberId: string,
   ) {
-    return this.workspaces.removeMember(
-      identity(request),
+    const auth = identity(request);
+    const result = await this.workspaces.removeMember(
+      auth,
       workspaceId,
       memberId,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'member',
+      memberId,
+      ActivityType.MEMBER_REMOVED,
+    );
+    return result;
   }
 
   @Get(':workspaceId/invitations')
@@ -158,7 +218,7 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/invitations')
-  invite(
+  async invite(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() body: unknown,
@@ -166,12 +226,22 @@ export class WorkspacesController {
   ) {
     response.setHeader('Cache-Control', 'private, no-store');
     const input = parse(inviteSchema, body);
-    return this.workspaces.invite(
-      identity(request),
+    const auth = identity(request);
+    const invitation = await this.workspaces.invite(
+      auth,
       workspaceId,
       input.email,
       input.role,
     );
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'workspace',
+      workspaceId,
+      ActivityType.MEMBER_INVITED,
+      { role: input.role },
+    );
+    return invitation;
   }
 
   @Delete(':workspaceId/invitations/:invitationId')
@@ -188,11 +258,20 @@ export class WorkspacesController {
   }
 
   @Delete(':workspaceId')
-  archive(
+  async archive(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
   ) {
-    return this.workspaces.archive(identity(request), workspaceId);
+    const auth = identity(request);
+    const result = await this.workspaces.archive(auth, workspaceId);
+    await this.activity.recordWorkspace(
+      auth,
+      workspaceId,
+      'workspace',
+      workspaceId,
+      ActivityType.WORKSPACE_ARCHIVED,
+    );
+    return result;
   }
 }
 

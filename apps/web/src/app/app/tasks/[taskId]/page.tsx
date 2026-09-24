@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { ApiError, apiRequest } from '@/lib/api/server';
 import type {
   Board,
+  ActivityEvent,
+  ActivityPage,
   CommentPage,
   Member,
   Profile,
@@ -13,6 +15,7 @@ import type {
   TaskPage as TaskListResponse,
 } from '@/lib/api/types';
 import { SignOutButton } from '../../sign-out-button';
+import { ActivityFeed } from '../../activity-feed';
 import {
   archiveTask,
   copyTask,
@@ -39,6 +42,7 @@ export default async function TaskPage({
     comment?: string;
     commentError?: string;
     commentPages?: string;
+    activityPages?: string;
   }>;
 }) {
   const { taskId } = await params;
@@ -110,6 +114,27 @@ export default async function TaskPage({
     );
     comments.push(...next.items);
     nextCommentCursor = next.nextCursor;
+  }
+  const activityPages = Math.min(
+    Math.max(Number(notices.activityPages) || 1, 1),
+    10,
+  );
+  const activity: ActivityEvent[] = [];
+  let nextActivityCursor: string | null = null;
+  let activityUnavailable = false;
+  try {
+    const first = await apiRequest<ActivityPage>(`/tasks/${taskId}/activity`);
+    activity.push(...first.items);
+    nextActivityCursor = first.nextCursor;
+    for (let page = 1; page < activityPages && nextActivityCursor; page++) {
+      const next: ActivityPage = await apiRequest<ActivityPage>(
+        `/tasks/${taskId}/activity?cursor=${nextActivityCursor}`,
+      );
+      activity.push(...next.items);
+      nextActivityCursor = next.nextCursor;
+    }
+  } catch {
+    activityUnavailable = true;
   }
 
   return (
@@ -442,6 +467,17 @@ export default async function TaskPage({
           pageCount={pageCount}
           notice={notices.comment}
           error={notices.commentError}
+        />
+        <ActivityFeed
+          title="Task activity"
+          events={activity}
+          columns={board.columns}
+          unavailable={activityUnavailable}
+          moreHref={
+            nextActivityCursor && activityPages < 10
+              ? `/app/tasks/${taskId}?activityPages=${activityPages + 1}`
+              : undefined
+          }
         />
       </main>
     </div>

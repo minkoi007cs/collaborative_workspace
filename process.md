@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 9 — Comments, mentions, and typing (locally implemented and tested)
-Current Milestone: Authorized task discussion with versioned comments and real-time signals
+Current Phase: Phase 10 — Activity history (locally implemented and tested)
+Current Milestone: Scoped task and workspace history with actor and action details
 Current Branch: main
-Current Focus: Phase 10 durable activity history
-Last Completed Feature: Task comments with mentions, notification records, authorized comment events, and typing indicators
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no activity feed or notification inbox; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Implement Phase 10 task/workspace activity records and feed
+Current Focus: Phase 11 notification inbox and read state
+Last Completed Feature: Paginated activity feeds for task and workspace actions, with membership checks and actor metadata
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no notification inbox; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Implement Phase 11 notification inbox and read state
 
 ---
 
@@ -792,3 +792,89 @@ Phases 0–9 are locally implemented and tested. Main is pushed through Phase 8;
 ### Next Recommended Task
 
 Implement Phase 10 durable activity history and a scoped workspace/task feed.
+
+## [2026-09-24] Change ID: PROC-010
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(activity): add scoped task and workspace history`
+
+### Summary
+
+Implemented Phase 10 activity records and paginated task/workspace feeds. Current members can see an actor, action, time, and relevant details for changes in their workspace.
+
+### Reason
+
+Collaborators need a durable trail to understand who changed a task or workspace and when. Feed access must follow current membership and task ancestry.
+
+### Features Added
+
+- PostgreSQL `ActivityEvent` records for workspace, membership, project, board, task, and comment actions.
+- Membership-scoped workspace and task activity APIs with validated cursors and 50-entry pages.
+- Task and workspace activity panels with pagination and an unavailable state if the feed request fails.
+- Integration checks for outsider denial and authorized actor/action visibility.
+
+### Features Modified
+
+- Successful mutation controllers record activity after the primary write. Logging failure is warned and does not turn a completed mutation into an API error.
+- README, architecture spec, and audit now describe Phase 10 and its delivery limit.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and two migrations; new activity API module; workspace, project, task, and comment controllers; task integration test; task/workspace pages, activity component, web types/styles; README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+Applied `20260924043203_activity_history` and `20260924043447_activity_actions` locally. `activity_events` stores actor, workspace/project/task scope, event type, metadata, and UTC creation time, with workspace/task feed indexes and foreign keys. Hard-deleted task records retain their workspace history by clearing the task foreign key.
+
+### API Changes
+
+Added `GET /api/v1/workspaces/:workspaceId/activity` and `GET /api/v1/tasks/:taskId/activity`. Both return up to 50 events and a `nextCursor`; unauthorized or inactive scope resolves to 404. Mutations now create records for the principal workspace, project, board, task, and comment actions.
+
+### WebSocket Changes
+
+- None. Activity panels load canonical API data on page render; live activity notifications are deferred.
+
+### Security Impact
+
+The server derives the actor from the verified token and resolves the event scope from stored ancestry. Feed reads require current workspace membership; task reads also require an active task, project, and workspace. Cursors must belong to the requested feed scope.
+
+### Tests Added or Updated
+
+- Task integration suite checks task/workspace activity visibility, event content, and outsider denial.
+
+### Tests Run
+
+- Both Phase 10 migrations deployed locally and Prisma client generated.
+- Biome format/lint and API/web TypeScript: passed.
+- Full serial API integration suite: 6/6 passed.
+- API production TypeScript build and Next.js production build: passed before the final best-effort lookup guard; the guard passed typecheck and the full integration suite afterward.
+- Authenticated browser activity UI not tested because Supabase project credentials are absent.
+
+### Known Problems
+
+Activity writes are best effort after primary commits, so a transient failure can leave a gap. The history does not yet cover every invitation and project edit action. The feed does not update live without a page refresh. Notification inbox, attachments, search, live provider validation, and production deployment remain.
+
+### Technical Debt Introduced
+
+A transactional outbox or an in-transaction append is needed for complete audit delivery. Feed pages stop after ten pages in the current web view; a dedicated client data layer will be needed for very long histories.
+
+### Architecture Decisions
+
+PostgreSQL is authoritative for activity, and an event stores both the durable entity ID and optional live foreign keys. Task hard deletion preserves the workspace record while clearing the task relation. Activity write failures remain observable in server logs without misreporting the already committed primary mutation.
+
+### tech.nmd Updated?
+
+Yes; data model, API, status, limits, and remaining work updated.
+
+### Current Project State After This Change
+
+Phases 0–10 are locally implemented and tested. Phase 10 is ready to commit and push. Live two-user browser QA awaits Supabase configuration, and GitHub CI has not been verified.
+
+### Next Recommended Task
+
+Implement Phase 11 notification inbox and read state.

@@ -232,6 +232,49 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       0,
     );
     assert.equal(
+      (await send(`/tasks/${task.id}/activity`, outsider)).status,
+      404,
+    );
+    const taskActivity = await send(`/tasks/${task.id}/activity`, viewer);
+    assert.equal(taskActivity.status, 200);
+    const taskEvents = (await taskActivity.json()) as {
+      items: Array<{
+        eventType: string;
+        actor: { id: string };
+        metadata: { title?: string };
+      }>;
+    };
+    assert.equal(taskEvents.items[0].eventType, 'COMMENT_DELETED');
+    assert.ok(
+      taskEvents.items.some(
+        (entry) =>
+          entry.eventType === 'TASK_CREATED' &&
+          entry.metadata.title === 'Prepare release',
+      ),
+    );
+    assert.equal(
+      (await send(`/workspaces/${workspaceId}/activity`, outsider)).status,
+      404,
+    );
+    const workspaceActivity = await send(
+      `/workspaces/${workspaceId}/activity`,
+      viewer,
+    );
+    assert.equal(workspaceActivity.status, 200);
+    const workspaceEvents = (await workspaceActivity.json()) as {
+      items: Array<{ eventType: string }>;
+    };
+    assert.ok(
+      workspaceEvents.items.some(
+        (entry) => entry.eventType === 'WORKSPACE_CREATED',
+      ),
+    );
+    assert.ok(
+      workspaceEvents.items.some(
+        (entry) => entry.eventType === 'PROJECT_CREATED',
+      ),
+    );
+    assert.equal(
       (
         await send(`/tasks/${task.id}`, viewer, 'PATCH', {
           title: 'Denied',

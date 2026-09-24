@@ -13,7 +13,9 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ActivityType } from '@prisma/client';
 import { z } from 'zod';
+import { ActivityService } from '../activity/activity.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { RealtimePublisher } from '../realtime/realtime.publisher';
@@ -54,6 +56,7 @@ function identity(request: AuthenticatedRequest): AuthIdentity {
 export class WorkspaceProjectsController {
   constructor(
     @Inject(ProjectsService) private readonly projects: ProjectsService,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get()
@@ -65,16 +68,23 @@ export class WorkspaceProjectsController {
   }
 
   @Post()
-  create(
+  async create(
     @Req() request: AuthenticatedRequest,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.create(
-      identity(request),
+    const auth = identity(request);
+    const project = await this.projects.create(
+      auth,
       workspaceId,
       parse(projectSchema, body),
     );
+    await this.activity.recordProject(
+      auth,
+      project.id,
+      ActivityType.PROJECT_CREATED,
+    );
+    return project;
   }
 }
 
@@ -84,6 +94,7 @@ export class ProjectsController {
   constructor(
     @Inject(ProjectsService) private readonly projects: ProjectsService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get(':projectId')
@@ -113,6 +124,11 @@ export class ProjectsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
     const result = await this.projects.archive(identity(request), projectId);
+    await this.activity.recordProject(
+      identity(request),
+      projectId,
+      ActivityType.PROJECT_ARCHIVED,
+    );
     await this.realtime.evictProject(projectId);
     return result;
   }
@@ -126,16 +142,19 @@ export class ProjectsController {
   }
 
   @Post(':projectId/boards')
-  createBoard(
+  async createBoard(
     @Req() request: AuthenticatedRequest,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.createBoard(
-      identity(request),
+    const auth = identity(request);
+    const board = await this.projects.createBoard(
+      auth,
       projectId,
       parse(nameSchema, body).name,
     );
+    await this.activity.recordBoard(auth, board.id, ActivityType.BOARD_CREATED);
+    return board;
   }
 }
 
@@ -145,6 +164,7 @@ export class BoardsController {
   constructor(
     @Inject(ProjectsService) private readonly projects: ProjectsService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get(':boardId')
@@ -168,6 +188,12 @@ export class BoardsController {
       parse(columnSchema, body),
     );
     await this.realtime.publishBoardForIdentity(board, auth);
+    await this.activity.recordBoard(
+      auth,
+      board.id,
+      ActivityType.BOARD_UPDATED,
+      { version: board.version },
+    );
     return board;
   }
 
@@ -186,6 +212,12 @@ export class BoardsController {
       parse(columnSchema, body),
     );
     await this.realtime.publishBoardForIdentity(board, auth);
+    await this.activity.recordBoard(
+      auth,
+      board.id,
+      ActivityType.BOARD_UPDATED,
+      { version: board.version },
+    );
     return board;
   }
 
@@ -204,6 +236,12 @@ export class BoardsController {
       parse(versionSchema, body).expectedVersion,
     );
     await this.realtime.publishBoardForIdentity(board, auth);
+    await this.activity.recordBoard(
+      auth,
+      board.id,
+      ActivityType.BOARD_UPDATED,
+      { version: board.version },
+    );
     return board;
   }
 
@@ -220,6 +258,12 @@ export class BoardsController {
       parse(orderSchema, body),
     );
     await this.realtime.publishBoardForIdentity(board, auth);
+    await this.activity.recordBoard(
+      auth,
+      board.id,
+      ActivityType.BOARD_UPDATED,
+      { version: board.version },
+    );
     return board;
   }
 }

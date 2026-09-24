@@ -89,6 +89,22 @@ export type TaskComment = {
   mentions: Array<{ user: { id: string; displayName: string; email: string } }>;
 };
 export type CommentPage = { items: TaskComment[]; nextCursor: string | null };
+export type ActivityEvent = {
+  id: string;
+  workspaceId: string;
+  projectId: string | null;
+  taskId: string | null;
+  entityType: string;
+  entityId: string;
+  eventType: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor: { id: string; displayName: string };
+};
+export type ActivityPage = {
+  items: ActivityEvent[];
+  nextCursor: string | null;
+};
 export type TaskLabel = {
   id: string;
   name: string;

@@ -32,6 +32,7 @@ model User {
   commentMentions       CommentMention[]
   receivedNotifications Notification[]        @relation("NotificationRecipient")
   sentNotifications     Notification[]        @relation("NotificationActor")
+  activityEvents        ActivityEvent[]
 
   @@map("users")
 }
@@ -44,17 +45,18 @@ enum WorkspaceRole {
 }
 
 model Workspace {
-  id            String                @id @default(uuid()) @db.Uuid
-  name          String                @db.VarChar(100)
-  ownerId       String                @map("owner_id") @db.Uuid
-  owner         User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members       WorkspaceMember[]
-  invitations   WorkspaceInvitation[]
-  projects      Project[]
-  notifications Notification[]
-  createdAt     DateTime              @default(now()) @map("created_at")
-  updatedAt     DateTime              @updatedAt @map("updated_at")
-  archivedAt    DateTime?             @map("archived_at")
+  id             String                @id @default(uuid()) @db.Uuid
+  name           String                @db.VarChar(100)
+  ownerId        String                @map("owner_id") @db.Uuid
+  owner          User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members        WorkspaceMember[]
+  invitations    WorkspaceInvitation[]
+  projects       Project[]
+  notifications  Notification[]
+  activityEvents ActivityEvent[]
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  archivedAt     DateTime?             @map("archived_at")
 
   @@index([ownerId])
   @@map("workspaces")
@@ -100,19 +102,20 @@ enum ProjectStatus {
 }
 
 model Project {
-  id          String        @id @default(uuid()) @db.Uuid
-  workspaceId String        @map("workspace_id") @db.Uuid
-  name        String        @db.VarChar(100)
-  description String?       @db.VarChar(2000)
-  status      ProjectStatus @default(ACTIVE)
-  createdBy   String        @map("created_by") @db.Uuid
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  archivedAt  DateTime?     @map("archived_at")
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  creator     User          @relation("ProjectCreator", fields: [createdBy], references: [id])
-  boards      Board[]
-  labels      Label[]
+  id             String          @id @default(uuid()) @db.Uuid
+  workspaceId    String          @map("workspace_id") @db.Uuid
+  name           String          @db.VarChar(100)
+  description    String?         @db.VarChar(2000)
+  status         ProjectStatus   @default(ACTIVE)
+  createdBy      String          @map("created_by") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  archivedAt     DateTime?       @map("archived_at")
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator        User            @relation("ProjectCreator", fields: [createdBy], references: [id])
+  boards         Board[]
+  labels         Label[]
+  activityEvents ActivityEvent[]
 
   @@index([workspaceId, status])
   @@map("projects")
@@ -157,27 +160,28 @@ enum TaskPriority {
 }
 
 model Task {
-  id            String         @id @default(uuid()) @db.Uuid
-  boardId       String         @map("board_id") @db.Uuid
-  columnId      String         @map("column_id") @db.Uuid
-  title         String         @db.VarChar(200)
-  description   String?        @db.Text
-  rank          String         @db.VarChar(18)
-  priority      TaskPriority   @default(NONE)
-  dueAt         DateTime?      @map("due_at")
-  createdBy     String         @map("created_by") @db.Uuid
-  version       Int            @default(1)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  completedAt   DateTime?      @map("completed_at")
-  archivedAt    DateTime?      @map("archived_at")
-  board         Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  column        Column         @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: Restrict)
-  creator       User           @relation("TaskCreator", fields: [createdBy], references: [id])
-  assignees     TaskAssignee[]
-  labels        TaskLabel[]
-  comments      Comment[]
-  notifications Notification[]
+  id             String          @id @default(uuid()) @db.Uuid
+  boardId        String          @map("board_id") @db.Uuid
+  columnId       String          @map("column_id") @db.Uuid
+  title          String          @db.VarChar(200)
+  description    String?         @db.Text
+  rank           String          @db.VarChar(18)
+  priority       TaskPriority    @default(NONE)
+  dueAt          DateTime?       @map("due_at")
+  createdBy      String          @map("created_by") @db.Uuid
+  version        Int             @default(1)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  completedAt    DateTime?       @map("completed_at")
+  archivedAt     DateTime?       @map("archived_at")
+  board          Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column         Column          @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: Restrict)
+  creator        User            @relation("TaskCreator", fields: [createdBy], references: [id])
+  assignees      TaskAssignee[]
+  labels         TaskLabel[]
+  comments       Comment[]
+  notifications  Notification[]
+  activityEvents ActivityEvent[]
 
   @@unique([columnId, rank])
   @@index([boardId, archivedAt])
@@ -273,4 +277,49 @@ model Notification {
   @@index([recipientId, createdAt])
   @@index([workspaceId, createdAt])
   @@map("notifications")
+}
+
+enum ActivityType {
+  WORKSPACE_CREATED
+  WORKSPACE_RENAMED
+  WORKSPACE_ARCHIVED
+  OWNER_TRANSFERRED
+  MEMBER_INVITED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  PROJECT_CREATED
+  PROJECT_ARCHIVED
+  BOARD_CREATED
+  BOARD_UPDATED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_MOVED
+  TASK_ASSIGNED
+  TASK_LABELS_CHANGED
+  TASK_ARCHIVED
+  TASK_DELETED
+  COMMENT_CREATED
+  COMMENT_UPDATED
+  COMMENT_DELETED
+}
+
+model ActivityEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  projectId   String?      @map("project_id") @db.Uuid
+  taskId      String?      @map("task_id") @db.Uuid
+  actorId     String       @map("actor_id") @db.Uuid
+  entityType  String       @map("entity_type") @db.VarChar(30)
+  entityId    String       @map("entity_id") @db.Uuid
+  eventType   ActivityType @map("event_type")
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task        Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  actor       User         @relation(fields: [actorId], references: [id])
+
+  @@index([workspaceId, createdAt, id])
+  @@index([taskId, createdAt, id])
+  @@map("activity_events")
 }

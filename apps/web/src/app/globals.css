@@ -719,6 +719,17 @@ button:disabled {
 .comment-actions details {
   flex: 1 1 100%;
 }
+.activity-feed {
+  max-width: 920px;
+}
+.activity-feed li {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.activity-feed time {
+  color: #68758b;
+  white-space: nowrap;
+}
 .check-list {
   display: grid;
   gap: 8px;

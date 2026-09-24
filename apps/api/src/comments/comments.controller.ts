@@ -13,7 +13,9 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ActivityType } from '@prisma/client';
 import { z } from 'zod';
+import { ActivityService } from '../activity/activity.service';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { RealtimePublisher } from '../realtime/realtime.publisher';
@@ -44,6 +46,7 @@ export class TaskCommentsController {
   constructor(
     @Inject(CommentsService) private readonly comments: CommentsService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get()
@@ -68,6 +71,13 @@ export class TaskCommentsController {
       taskId,
       parse(contentSchema, body).content,
     );
+    await this.activity.recordComment(
+      identity(request),
+      result.boardId,
+      taskId,
+      result.comment.id,
+      ActivityType.COMMENT_CREATED,
+    );
     this.realtime.publishComment(
       'comment.created',
       result.comment,
@@ -88,6 +98,7 @@ export class CommentsController {
   constructor(
     @Inject(CommentsService) private readonly comments: CommentsService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Patch(':commentId')
@@ -102,6 +113,13 @@ export class CommentsController {
       commentId,
       input.content,
       input.expectedVersion,
+    );
+    await this.activity.recordComment(
+      identity(request),
+      result.boardId,
+      result.comment.taskId,
+      commentId,
+      ActivityType.COMMENT_UPDATED,
     );
     this.realtime.publishComment(
       'comment.updated',
@@ -126,6 +144,13 @@ export class CommentsController {
       identity(request),
       commentId,
       parse(deleteSchema, body).expectedVersion,
+    );
+    await this.activity.recordComment(
+      identity(request),
+      result.boardId,
+      result.taskId,
+      commentId,
+      ActivityType.COMMENT_DELETED,
     );
     this.realtime.publishComment(
       'comment.deleted',

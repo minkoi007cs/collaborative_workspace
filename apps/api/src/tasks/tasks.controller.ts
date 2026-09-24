@@ -14,9 +14,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { TaskPriority } from '@prisma/client';
+import { ActivityType, TaskPriority } from '@prisma/client';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
+import { ActivityService } from '../activity/activity.service';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { RealtimePublisher } from '../realtime/realtime.publisher';
 import { TasksService } from './tasks.service';
@@ -74,6 +75,7 @@ export class BoardsTasksController {
   constructor(
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get()
@@ -99,6 +101,13 @@ export class BoardsTasksController {
       boardId,
       parse(createSchema, body),
     );
+    await this.activity.recordTask(
+      auth,
+      boardId,
+      task.id,
+      ActivityType.TASK_CREATED,
+      { title: task.title, columnId: task.columnId },
+    );
     await this.realtime.publishTaskForIdentity('task.created', task, auth);
     return task;
   }
@@ -110,6 +119,7 @@ export class TasksController {
   constructor(
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get(':taskId')
@@ -132,6 +142,13 @@ export class TasksController {
       taskId,
       parse(updateSchema, body),
     );
+    await this.activity.recordTask(
+      auth,
+      task.boardId,
+      task.id,
+      ActivityType.TASK_UPDATED,
+      { title: task.title, version: task.version },
+    );
     await this.realtime.publishTaskForIdentity('task.updated', task, auth);
     return task;
   }
@@ -143,7 +160,19 @@ export class TasksController {
     @Body() body: unknown,
   ) {
     const auth = identity(request);
+    const before = await this.tasks.get(auth, taskId);
     const task = await this.tasks.move(auth, taskId, parse(moveSchema, body));
+    await this.activity.recordTask(
+      auth,
+      task.boardId,
+      task.id,
+      ActivityType.TASK_MOVED,
+      {
+        title: task.title,
+        fromColumnId: before.columnId,
+        toColumnId: task.columnId,
+      },
+    );
     await this.realtime.publishTaskForIdentity('task.moved', task, auth);
     return task;
   }
@@ -155,6 +184,13 @@ export class TasksController {
   ) {
     const auth = identity(request);
     const task = await this.tasks.copy(auth, taskId);
+    await this.activity.recordTask(
+      auth,
+      task.boardId,
+      task.id,
+      ActivityType.TASK_CREATED,
+      { title: task.title, copiedFrom: taskId },
+    );
     await this.realtime.publishTaskForIdentity('task.created', task, auth);
     return task;
   }
@@ -170,6 +206,13 @@ export class TasksController {
       auth,
       taskId,
       parse(assigneeSchema, body),
+    );
+    await this.activity.recordTask(
+      auth,
+      task.boardId,
+      task.id,
+      ActivityType.TASK_ASSIGNED,
+      { title: task.title, assigneeCount: task.assignees.length },
     );
     await this.realtime.publishTaskForIdentity('task.updated', task, auth);
     return task;
@@ -187,6 +230,13 @@ export class TasksController {
       taskId,
       parse(labelsSchema, body),
     );
+    await this.activity.recordTask(
+      auth,
+      task.boardId,
+      task.id,
+      ActivityType.TASK_LABELS_CHANGED,
+      { title: task.title, labelCount: task.labels.length },
+    );
     await this.realtime.publishTaskForIdentity('task.updated', task, auth);
     return task;
   }
@@ -203,6 +253,13 @@ export class TasksController {
       auth,
       taskId,
       parse(archiveSchema, body).expectedVersion,
+    );
+    await this.activity.recordTask(
+      auth,
+      before.boardId,
+      taskId,
+      ActivityType.TASK_ARCHIVED,
+      { title: before.title },
     );
     await this.realtime.publishTaskForIdentity(
       'task.deleted',
@@ -225,6 +282,13 @@ export class TasksController {
       auth,
       taskId,
       parse(archiveSchema, body).expectedVersion,
+    );
+    await this.activity.recordTask(
+      auth,
+      before.boardId,
+      taskId,
+      ActivityType.TASK_DELETED,
+      { title: before.title },
     );
     await this.realtime.publishTaskForIdentity(
       'task.deleted',

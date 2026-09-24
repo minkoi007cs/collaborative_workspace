@@ -7,6 +7,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CommentsModule } from './comments/comments.module';
+import { ActivityModule } from './activity/activity.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CommentsModule } from './comments/comments.module';
     TasksModule,
     RealtimeModule,
     CommentsModule,
+    ActivityModule,
   ],
 })
 export class AppModule {}
