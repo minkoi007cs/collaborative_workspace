@@ -5,10 +5,10 @@
 Current Phase: Phase 14 — Security/performance/accessibility hardening (in progress; Phase 12 attachments and Phase 11 email delivery pending)
 Current Milestone: Invitation abuse limits and basic browser response protections
 Current Branch: main
-Current Focus: Repair and verify GitHub CI, then continue Phase 14 hardening and Phase 12 private attachments
-Last Completed Feature: Fixed conflicting pnpm versions in GitHub Actions setup
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; CI fix awaits a successful remote run
-Next Recommended Task: Verify the GitHub Actions run after the pnpm setup fix
+Current Focus: Continue Phase 14 hardening and Phase 12 private attachments
+Last Completed Feature: Verified GitHub Actions checks and process jobs green after the pnpm setup fix
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent
+Next Recommended Task: Configure private object storage for Phase 12 attachments and complete live Supabase QA
 
 ---
 
@@ -1300,3 +1300,81 @@ CI setup is corrected in source. A passing remote run remains to be verified.
 ### Next Recommended Task
 
 Inspect the new GitHub Actions run and fix any downstream failures it reveals.
+
+## [2026-09-24] Change ID: PROC-016
+
+Author: Codex
+Branch: main
+Planned Commit Message: `docs(process): record passing GitHub CI`
+
+### Summary
+
+Verified the first complete passing GitHub Actions run after the pnpm setup fix and updated project status.
+
+### Reason
+
+Local tests alone did not prove the hosted PostgreSQL/Redis services, migrations, checks, integration suite, and production builds work together on the GitHub runner.
+
+### Features Added
+
+- Recorded remote CI evidence: run `36041208853` for commit `af4647b` completed with a successful `checks` job and successful `process` job.
+
+### Features Modified
+
+- Current status, architecture status, and audit finding now reflect remote CI success.
+
+### Features Removed
+
+- Stale claim that CI was unverified.
+
+### Files / Modules Affected
+
+- `process.md`, `tech.nmd`, and audit document.
+
+### Database Changes
+
+- None.
+
+### API Changes
+
+- None.
+
+### WebSocket Changes
+
+- None.
+
+### Security Impact
+
+- Remote checks now cover the current code path, including authentication integration tests and process-history validation.
+
+### Tests Added or Updated
+
+- None; this entry records completed remote verification.
+
+### Tests Run
+
+- GitHub Actions run `36041208853` completed successfully. Its checks job passed installation, Prisma generation/migrations, `pnpm check`, `pnpm test:integration`, and `pnpm build`; its process job passed the history guard.
+
+### Known Problems
+
+Live Supabase/Google browser flows, private attachments, invitation email delivery, and production deployment remain unverified or unimplemented.
+
+### Technical Debt Introduced
+
+- None.
+
+### Architecture Decisions
+
+- Keep the manifest as the single pnpm version source and use hosted CI results as the deployment readiness gate alongside local checks.
+
+### tech.nmd Updated?
+
+Yes; current development and known-issues status updated.
+
+### Current Project State After This Change
+
+GitHub CI has a verified passing run for `af4647b`. This documentation-only update remains to be pushed.
+
+### Next Recommended Task
+
+Configure private object storage for Phase 12 attachments and supply live Supabase configuration for end-to-end QA.
