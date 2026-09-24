@@ -89,7 +89,7 @@ Boards use integer `version` for column changes. Each column mutation sends `exp
 
 ## 20. Optimistic UI Strategy
 
-For task moves, snapshot the board task list, apply an immediate local change, send the expected version, reconcile the returned canonical task, and roll back with an understandable conflict message on rejection. The board refetches after REST moves, socket events, and reconnection; socket refresh waits while an optimistic move is in flight. Never silently overwrite an edit.
+For task moves, snapshot the board task list, apply an immediate local change, send the expected version, reconcile the returned canonical task, and roll back with an understandable conflict message on rejection. A synchronous pending guard prevents duplicate move requests before React rerenders. The board refetches after REST moves, conflicts, socket events, and reconnection; socket refresh waits while an optimistic move is in flight. Task detail forms remount on server version changes and a 409 invalidates the route before rendering canonical state. Two concurrent writers are tested: one commit wins, the other receives 409. Never silently overwrite an edit.
 
 ## 21. Redis Architecture
 
@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phases 0–7 are locally implemented and tested using mock JWKS. Phase 7 adds Redis workspace presence with multi-tab semantics and heartbeat. Live Supabase/Google flows need project configuration. Next is Phase 8 optimistic UI and concurrency hardening. The first GitHub Actions run still needs review. See `process.md` for exact results.
+Phases 0–8 are locally implemented and tested using mock JWKS. Phase 8 completes optimistic task move and conflict reconciliation hardening on the Phase 5 version model. Live Supabase/Google flows need project configuration. Next is Phase 9 comments and typing. The first GitHub Actions run still needs review. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 

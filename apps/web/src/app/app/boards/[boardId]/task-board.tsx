@@ -194,7 +194,7 @@ export function TaskBoardProvider({
     toColumnId: string,
     beforeTaskId: string | null,
   ) {
-    if (!canEdit || pending) return;
+    if (!canEdit || pendingRef.current) return;
     const task = tasks.find((item) => item.id === taskId);
     if (!task || !columns.some((column) => column.id === toColumnId)) return;
     if (beforeTaskId === taskId) return;
@@ -244,7 +244,7 @@ export function TaskBoardProvider({
       }
       setError(
         result.error === 'conflict'
-          ? 'Another edit changed this task. Refresh the board to review it.'
+          ? 'Another edit changed this task. The board has been refreshed; review it before trying again.'
           : 'Could not move this task. Try again.',
       );
       router.refresh();

@@ -135,7 +135,10 @@ export default async function TaskPage({
             Could not save this change. Check your input and try again.
           </p>
         )}
-        <div className="workspace-grid task-layout">
+        <div
+          className="workspace-grid task-layout"
+          key={`${task.id}:${task.version}`}
+        >
           <section className="banner" aria-labelledby="details-title">
             <h2 id="details-title">Details</h2>
             {canEdit ? (

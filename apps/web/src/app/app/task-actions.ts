@@ -23,6 +23,7 @@ function fail(error: unknown, path: string): never {
   if (error instanceof ApiError && error.status === 401) redirect('/login');
   const code =
     error instanceof ApiError && error.status === 409 ? 'conflict' : 'save';
+  if (code === 'conflict') revalidatePath(path);
   redirect(`${path}?error=${code}`);
 }
 

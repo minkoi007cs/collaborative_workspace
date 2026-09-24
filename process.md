@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 7 — Redis workspace presence (locally implemented and tested)
-Current Milestone: Online workspace members with multi-tab leases, heartbeat, and disconnect handling
+Current Phase: Phase 8 — Optimistic task UI and concurrency (locally implemented and tested)
+Current Milestone: Single-flight task movement, conflict refresh, and concurrent version tests
 Current Branch: main
-Current Focus: Phase 8 optimistic UI and concurrency hardening
-Last Completed Feature: Redis workspace presence with per-socket leases, authorized heartbeat, multi-tab handling, and online board UI
+Current Focus: Phase 9 comments, mentions, and typing indicators
+Last Completed Feature: Optimistic move rollback/reconciliation, versioned forms, and two-writer conflict test
 Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no comments/activity; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Harden optimistic task UX and conflict reconciliation, then implement Phase 9 comments
+Next Recommended Task: Implement Phase 9 comments, mentions, real-time comment events, and typing indicators
 
 ---
 
@@ -620,3 +620,87 @@ Phases 0–7 are locally implemented and tested; Phase 6 is on GitHub main. Phas
 ### Next Recommended Task
 
 Complete Phase 8 optimistic UI and concurrency hardening, then Phase 9 comments and typing indicators.
+
+## [2026-09-24] Change ID: PROC-008
+
+Author: Codex
+Branch: main
+Planned Commit Message: `fix(tasks): reconcile concurrent board edits`
+
+### Summary
+
+Completed Phase 8 by hardening the optimistic board movement already introduced in Phase 5 and verifying a real two-writer task move conflict.
+
+### Reason
+
+React pending state does not synchronously block two rapid input events. Conflict responses also need a clear return to canonical server state so users can safely retry.
+
+### Features Added
+
+- Concurrent integration test sends two valid moves of the same task and expected version from different editors; it asserts one 201, one 409, and the winning canonical version/column.
+- Task detail form subtree remounts when task version changes, so a redirected conflict view shows current field values.
+
+### Features Modified
+
+- Board movement uses a synchronous in-flight guard, rolls back a rejected move, refreshes the board, and explains that the latest state has loaded.
+- Task server actions revalidate the task route on 409 before redirecting to conflict feedback.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Board task provider, task detail page and actions, task integration test, `tech.nmd`, audit, and this log.
+
+### Database Changes
+
+None. Existing task `version` and rank constraints remain authoritative.
+
+### API Changes
+
+No route changes. Existing optimistic concurrency returns 409 for stale task edits and moves.
+
+### WebSocket Changes
+
+None. Phase 6 board events continue to trigger canonical refresh.
+
+### Security Impact
+
+No permission changes. The server still checks editor membership and expected version; the client guard is for UX, not authorization.
+
+### Tests Added or Updated
+
+- Added simultaneous owner/editor move requests against one task version, then checked the winning persisted state and archived the test task.
+
+### Tests Run
+
+- Biome format/lint and API/web TypeScript: passed.
+- Task integration test: passed.
+- Full serial API integration suite: 6/6 passed.
+- Next.js production build: passed. API production build passed in Phase 7 and API production code did not change in this commit.
+- Authenticated browser drag/drop remains untested without live Supabase configuration.
+
+### Known Problems
+
+The task board still progressively loads at most 1,000 tasks and refreshes the whole board on remote events. Live two-user browser visuals cannot be checked without provider credentials. Comments, activity, notifications, files, search, reliable event replay, multi-instance socket fanout, and deployment remain.
+
+### Technical Debt Introduced
+
+No new persistent debt. A more granular task cache and full keyboard drag/drop interaction may be warranted for large boards.
+
+### Architecture Decisions
+
+Keep task version compare-and-swap on the server and treat optimistic client state as provisional. A conflict returns a canonical server refresh; the rejected local move never overwrites the winner.
+
+### tech.nmd Updated?
+
+Yes; optimistic UI and current phase updated.
+
+### Current Project State After This Change
+
+Phases 0–8 are locally implemented and tested. Main is pushed through Phase 7; this Phase 8 change is ready to commit and push. Several MVP features still remain.
+
+### Next Recommended Task
+
+Implement Phase 9 persisted task comments with mentions, authorized real-time events, and scoped typing indicators.

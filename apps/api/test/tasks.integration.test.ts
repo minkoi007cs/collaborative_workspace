@@ -362,6 +362,44 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     const list = await send(`/boards/${board.id}/tasks`, editor);
     assert.equal(list.status, 200);
     assert.equal(((await list.json()) as { items: unknown[] }).items.length, 2);
+    const raceCreated = await send(`/boards/${board.id}/tasks`, owner, 'POST', {
+      title: 'Concurrent move',
+      columnId: todo.id,
+    });
+    assert.equal(raceCreated.status, 201);
+    const raceTask = (await raceCreated.json()) as {
+      id: string;
+      version: number;
+    };
+    const [firstMove, secondMove] = await Promise.all([
+      send(`/tasks/${raceTask.id}/move`, owner, 'POST', {
+        toColumnId: inProgress.id,
+        expectedVersion: raceTask.version,
+      }),
+      send(`/tasks/${raceTask.id}/move`, editor, 'POST', {
+        toColumnId: board.columns[2].id,
+        expectedVersion: raceTask.version,
+      }),
+    ]);
+    assert.deepEqual([firstMove.status, secondMove.status].sort(), [201, 409]);
+    const winner = firstMove.status === 201 ? firstMove : secondMove;
+    const winningTask = (await winner.json()) as {
+      columnId: string;
+      version: number;
+    };
+    const canonicalTask = (await (
+      await send(`/tasks/${raceTask.id}`, owner)
+    ).json()) as { columnId: string; version: number };
+    assert.equal(canonicalTask.columnId, winningTask.columnId);
+    assert.equal(canonicalTask.version, 2);
+    assert.equal(
+      (
+        await send(`/tasks/${raceTask.id}`, owner, 'DELETE', {
+          expectedVersion: 2,
+        })
+      ).status,
+      200,
+    );
     const editorMemberId = members.find(
       (member) => member.user.id === editorId,
     )?.id;
