@@ -142,4 +142,43 @@ export class RealtimePublisher {
       );
     }
   }
+
+  publishComment(
+    event: 'comment.created' | 'comment.updated' | 'comment.deleted',
+    comment: {
+      id: string;
+      taskId: string;
+      version: number;
+      author: { id: string };
+    },
+    boardId: string,
+  ) {
+    this.namespace?.to(`task:${comment.taskId}`).emit(event, {
+      event,
+      eventId: randomUUID(),
+      boardId,
+      taskId: comment.taskId,
+      entityId: comment.id,
+      actorId: comment.author.id,
+      version: comment.version,
+      timestamp: new Date().toISOString(),
+      payload: {},
+    });
+  }
+
+  publishMentions(recipientIds: string[], commentId: string, taskId: string) {
+    for (const recipientId of recipientIds)
+      this.namespace?.to(`user:${recipientId}`).emit('notification.created', {
+        event: 'notification.created',
+        eventId: randomUUID(),
+        entityId: commentId,
+        taskId,
+        timestamp: new Date().toISOString(),
+        payload: { type: 'MENTION' },
+      });
+  }
+
+  evictTask(taskId: string) {
+    this.namespace?.in(`task:${taskId}`).disconnectSockets(true);
+  }
 }

@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a workspace and task collaboration platform under development. The repository contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, Phase 5 task management, Phase 6 authenticated board updates, and Phase 7 workspace presence. Comments, activity, notifications, and production operations remain on the roadmap.
+SyncSpace is a workspace and task collaboration platform under development. The repository contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, Phase 5 task management, Phase 6 authenticated board updates, Phase 7 workspace presence, Phase 8 conflict handling, and Phase 9 task comments. Activity history, a notification inbox, and production operations remain on the roadmap.
 
 ## Architecture
 
@@ -35,6 +35,8 @@ Signed-in users can create workspaces, invite teammates with a one-time link, an
 Board pages join an authorized Socket.IO room and refresh after task or column events. Connections use the current Supabase access token, are closed when it expires or membership is removed, and rejoin after reconnection. A visible status tells users when live updates are unavailable. REST remains the source of truth; there is no durable event replay or multi-instance socket adapter yet.
 
 The board shows online workspace members. Redis leases track each socket separately, so another tab keeps a member online when one tab closes. The client sends a heartbeat every 30 seconds; leases expire after 90 seconds and each heartbeat refreshes the displayed list. Presence is temporary and is not written to PostgreSQL.
+
+Task pages support comments from editors and above; viewers can read. Authors can edit or delete their own comments, with version conflicts reported clearly. Type `@member@example.com` or use the mention picker to notify a current workspace member. Comments are rendered as text, and authorized task sockets receive comment and short-lived typing events. Mention notifications are stored now; a notification inbox is planned for Phase 11.
 
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
 If the web server uses another port, set `WEB_ORIGIN` to that exact browser origin so REST and Socket.IO connections are accepted.

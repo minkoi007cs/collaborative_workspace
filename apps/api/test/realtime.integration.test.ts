@@ -23,7 +23,7 @@ function waitFor<T>(socket: Socket, event: string): Promise<T> {
   });
 }
 
-test('realtime authenticates, isolates rooms, tracks multi-tab presence and revokes membership', async () => {
+test('realtime authenticates, scopes rooms, delivers comments and tracks multi-tab presence', async () => {
   const { publicKey, privateKey } = await generateKeyPair('ES256');
   const jwk = await exportJWK(publicKey);
   const keyServer = createServer((_request, response) => {
@@ -218,6 +218,72 @@ test('realtime authenticates, isolates rooms, tracks multi-tab presence and revo
     assert.ok(event.actorId && event.eventId);
     assert.equal(leaked, false);
 
+    assert.deepEqual(
+      await stranger
+        .timeout(3000)
+        .emitWithAck('task.join', { taskId: task.id }),
+      { ok: false, error: 'not_found' },
+    );
+    const taskWatcher = socket(viewer);
+    const taskActor = socket(owner);
+    const taskWatcherConnected = waitFor<void>(taskWatcher, 'connect');
+    const taskActorConnected = waitFor<void>(taskActor, 'connect');
+    taskWatcher.connect();
+    taskActor.connect();
+    await Promise.all([taskWatcherConnected, taskActorConnected]);
+    assert.deepEqual(
+      await taskWatcher
+        .timeout(3000)
+        .emitWithAck('task.join', { taskId: task.id }),
+      { ok: true },
+    );
+    assert.deepEqual(
+      await taskActor
+        .timeout(3000)
+        .emitWithAck('task.join', { taskId: task.id }),
+      { ok: true },
+    );
+    const commentEvent = waitFor<{ taskId: string; entityId: string }>(
+      taskWatcher,
+      'comment.created',
+    );
+    const mentionEvent = waitFor<{ taskId: string; payload: { type: string } }>(
+      watcher,
+      'notification.created',
+    );
+    const commentResponse = await send(
+      `/tasks/${task.id}/comments`,
+      owner,
+      'POST',
+      { content: 'Review @realtime-1@example.test' },
+    );
+    assert.equal(commentResponse.status, 201);
+    const comment = (await commentResponse.json()) as { id: string };
+    assert.equal((await commentEvent).entityId, comment.id);
+    assert.equal((await mentionEvent).payload.type, 'MENTION');
+    const typingStarted = waitFor<{ taskId: string; userId: string }>(
+      taskWatcher,
+      'typing.started',
+    );
+    assert.deepEqual(
+      await taskActor
+        .timeout(3000)
+        .emitWithAck('typing', { taskId: task.id, active: true }),
+      { ok: true },
+    );
+    assert.equal((await typingStarted).taskId, task.id);
+    const typingStopped = waitFor<{ taskId: string }>(
+      taskWatcher,
+      'typing.stopped',
+    );
+    assert.deepEqual(
+      await taskActor
+        .timeout(3000)
+        .emitWithAck('typing', { taskId: task.id, active: false }),
+      { ok: true },
+    );
+    assert.equal((await typingStopped).taskId, task.id);
+
     const boardEvent = waitFor<{ boardId: string; version: number }>(
       watcher,
       'board.updated',
@@ -291,6 +357,13 @@ test('realtime authenticates, isolates rooms, tracks multi-tab presence and revo
     await disconnected;
     assert.equal(secondViewer.connected, false);
     assert.ok((await offline).entityId);
+    const taskSocketClosed = waitFor<string>(taskActor, 'disconnect');
+    assert.equal(
+      (await send(`/tasks/${task.id}`, owner, 'DELETE', { expectedVersion: 1 }))
+        .status,
+      200,
+    );
+    await taskSocketClosed;
     const archivedSocket = waitFor<string>(otherWatcher, 'disconnect');
     assert.equal(
       (await send(`/projects/${project.id}`, owner, 'DELETE')).status,

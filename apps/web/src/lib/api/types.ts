@@ -78,6 +78,17 @@ export type Task = {
 };
 
 export type TaskPage = { items: Task[]; nextCursor: string | null };
+export type TaskComment = {
+  id: string;
+  taskId: string;
+  content: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  author: { id: string; displayName: string };
+  mentions: Array<{ user: { id: string; displayName: string; email: string } }>;
+};
+export type CommentPage = { items: TaskComment[]; nextCursor: string | null };
 export type TaskLabel = {
   id: string;
   name: string;

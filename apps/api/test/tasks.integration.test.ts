@@ -140,6 +140,98 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     assert.equal((await send(`/tasks/${task.id}`, viewer)).status, 200);
     assert.equal((await send(`/tasks/${task.id}`, outsider)).status, 404);
     assert.equal(
+      (await send(`/tasks/${task.id}/comments`, outsider)).status,
+      404,
+    );
+    assert.equal(
+      (
+        await send(`/tasks/${task.id}/comments`, viewer, 'POST', {
+          content: 'Denied',
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await send(`/tasks/${task.id}/comments`, editor, 'POST', {
+          content: 'Hi @stranger@example.test',
+        })
+      ).status,
+      400,
+    );
+    const commentResponse = await send(
+      `/tasks/${task.id}/comments`,
+      editor,
+      'POST',
+      { content: 'Please review @task-owner@example.test' },
+    );
+    assert.equal(commentResponse.status, 201);
+    const comment = (await commentResponse.json()) as {
+      id: string;
+      version: number;
+      mentions: Array<{ user: { email: string } }>;
+    };
+    assert.equal(comment.version, 1);
+    assert.equal(comment.mentions[0].user.email, 'task-owner@example.test');
+    assert.equal(
+      await prisma.notification.count({
+        where: { commentId: comment.id, type: 'MENTION' },
+      }),
+      1,
+    );
+    assert.equal(
+      (
+        await send(`/comments/${comment.id}`, owner, 'PATCH', {
+          content: 'Hijack',
+          expectedVersion: 1,
+        })
+      ).status,
+      403,
+    );
+    const editedComment = await send(
+      `/comments/${comment.id}`,
+      editor,
+      'PATCH',
+      { content: 'Reviewed', expectedVersion: 1 },
+    );
+    assert.equal(editedComment.status, 200);
+    assert.equal(
+      ((await editedComment.json()) as { version: number }).version,
+      2,
+    );
+    assert.equal(
+      (
+        await send(`/comments/${comment.id}`, editor, 'PATCH', {
+          content: 'Stale',
+          expectedVersion: 1,
+        })
+      ).status,
+      409,
+    );
+    const listedComments = await send(`/tasks/${task.id}/comments`, viewer);
+    assert.equal(listedComments.status, 200);
+    assert.equal(
+      ((await listedComments.json()) as { items: Array<{ id: string }> })
+        .items[0].id,
+      comment.id,
+    );
+    assert.equal(
+      (
+        await send(`/comments/${comment.id}`, editor, 'DELETE', {
+          expectedVersion: 2,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        (await (await send(`/tasks/${task.id}/comments`, viewer)).json()) as {
+          items: unknown[];
+        }
+      ).items.length,
+      0,
+    );
+    assert.equal(
       (
         await send(`/tasks/${task.id}`, viewer, 'PATCH', {
           title: 'Denied',

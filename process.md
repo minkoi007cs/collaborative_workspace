@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 8 — Optimistic task UI and concurrency (locally implemented and tested)
-Current Milestone: Single-flight task movement, conflict refresh, and concurrent version tests
+Current Phase: Phase 9 — Comments, mentions, and typing (locally implemented and tested)
+Current Milestone: Authorized task discussion with versioned comments and real-time signals
 Current Branch: main
-Current Focus: Phase 9 comments, mentions, and typing indicators
-Last Completed Feature: Optimistic move rollback/reconciliation, versioned forms, and two-writer conflict test
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no comments/activity; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Implement Phase 9 comments, mentions, real-time comment events, and typing indicators
+Current Focus: Phase 10 durable activity history
+Last Completed Feature: Task comments with mentions, notification records, authorized comment events, and typing indicators
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no activity feed or notification inbox; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Implement Phase 10 task/workspace activity records and feed
 
 ---
 
@@ -704,3 +704,91 @@ Phases 0–8 are locally implemented and tested. Main is pushed through Phase 7;
 ### Next Recommended Task
 
 Implement Phase 9 persisted task comments with mentions, authorized real-time events, and scoped typing indicators.
+
+## [2026-09-24] Change ID: PROC-009
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(comments): add task discussion and mentions`
+
+### Summary
+
+Implemented Phase 9 task comments, current-member mentions, mention notification records, authorized real-time comment events, and short-lived typing indicators.
+
+### Reason
+
+The MVP requires people to discuss tasks in context. Comment access must follow task/workspace permissions, edits must not overwrite concurrent changes, and typing must remain ephemeral.
+
+### Features Added
+
+- Comment, mention, and first notification schema/migration. Comments use author ownership, soft deletion, and integer version. Mention notifications are created in the same transaction as the comment.
+- Paginated comment API with create/edit/delete; `@member@example.com` mentions must resolve to current workspace members. Unknown member mentions are rejected.
+- Task discussion UI with text-safe rendering, edit/delete controls for the author, member mention picker, pagination, and conflict feedback.
+- Authorized `task.join` room, comment created/updated/deleted events, user-scoped `notification.created`, and rate-limited `typing.started/stopped` with five-second expiry. Task page sockets also participate in workspace presence.
+- Task archive closes task sockets; project/workspace archive and membership removal close affected task sockets through their authorized rooms.
+
+### Features Modified
+
+- Task page now fetches comments and connects to the task room for live refresh and typing.
+- Realtime publisher carries comment actor/version and user-scoped mention notices.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and migration, comments API module, realtime gateway/publisher, task controller, API integration tests, task page/discussion/actions/styles/types, README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+Applied `20260924041857_comments_mentions`: `comments`, `comment_mentions`, `notifications`, indexes, foreign keys, and `NotificationType.MENTION`. Notification inbox/read routes are deferred to Phase 11.
+
+### API Changes
+
+Added `GET/POST /tasks/:taskId/comments`, `PATCH/DELETE /comments/:commentId`. Lists return 50 items plus cursor; writes validate 4,000-character content, membership mentions, role, ownership, and expected version.
+
+### WebSocket Changes
+
+Added `task.join`, `typing` input, `comment.created/updated/deleted`, `typing.started/stopped`, and `notification.created` for mention recipients. Events are emitted after committed writes; typing is not persisted.
+
+### Security Impact
+
+Task room joins resolve board/workspace access. Viewer can read but cannot post; only an editor who authored a comment can edit/delete. Mention addresses must be current workspace members. Comments are rendered as text, so HTML content is escaped. Rejected joins disclose no task details.
+
+### Tests Added or Updated
+
+- Task integration suite covers outsider/viewer denial, invalid mention, successful mention notification, author ownership, stale version, list visibility, and soft deletion.
+- Realtime suite covers unauthorized task join, comment/mention delivery, typing start/stop, and socket eviction after task archive.
+
+### Tests Run
+
+- Prisma migration deployed locally and client generated.
+- Biome format/lint and API/web TypeScript: passed.
+- Full serial API integration suite: 6/6 passed.
+- API TypeScript production build and Next.js production build: passed.
+- Authenticated browser discussion not run because live Supabase configuration is absent.
+
+### Known Problems
+
+Mention notifications are stored and emitted, but the user inbox/read UI belongs to Phase 11. Typing timers and socket event fanout are local to one API process; cross-instance delivery is deferred to Phase 16. No durable outbox/replay exists. Authenticated visual QA remains blocked by absent Supabase credentials. Activity history, files, search, and deployment remain.
+
+### Technical Debt Introduced
+
+Task page loads at most 500 comments across ten pages and refreshes the whole server page on comment events. A scoped comment cache can reduce work for busy discussions. Mention handles use full member email for an unambiguous identity; a friendly username system could be added after usernames have a uniqueness rule.
+
+### Architecture Decisions
+
+Comments are durable PostgreSQL truth, while typing is ephemeral. Email-form mentions are resolved against workspace membership within serializable comment transactions. Only newly added mentions on edit create new notification records. Task WebSocket room access follows task ancestry and is revoked on archive/removal.
+
+### tech.nmd Updated?
+
+Yes; data model, API, socket events, authorization, notification scope, and phase status updated.
+
+### Current Project State After This Change
+
+Phases 0–9 are locally implemented and tested. Main is pushed through Phase 8; this Phase 9 change is ready to commit and push. The app still needs live provider configuration and remaining roadmap features.
+
+### Next Recommended Task
+
+Implement Phase 10 durable activity history and a scoped workspace/task feed.

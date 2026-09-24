@@ -13,12 +13,15 @@ import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import type { AuthIdentity } from '../auth/auth.types';
 import { loadConfig } from '../config';
+import { PrismaService } from '../database/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { UsersService } from '../users/users.service';
 import { PresenceService } from './presence.service';
 import { RealtimePublisher } from './realtime.publisher';
 
 const boardSchema = z.object({ boardId: z.string().uuid() }).strict();
+const taskSchema = z.object({ taskId: z.string().uuid() }).strict();
+const typingSchema = taskSchema.extend({ active: z.boolean() });
 type AuthorizedSocket = Socket & {
   data: {
     identity: AuthIdentity;
@@ -28,6 +31,8 @@ type AuthorizedSocket = Socket & {
     boardId?: string;
     lastHeartbeat?: number;
     presenceRegistered?: boolean;
+    taskId?: string;
+    lastTyping?: number;
   };
 };
 
@@ -44,6 +49,10 @@ export class RealtimeGateway
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly typingTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
@@ -51,6 +60,7 @@ export class RealtimeGateway
     @Inject(ProjectsService) private readonly projects: ProjectsService,
     @Inject(RealtimePublisher) private readonly publisher: RealtimePublisher,
     @Inject(PresenceService) private readonly presence: PresenceService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
   afterInit(namespace: Namespace) {
@@ -89,7 +99,21 @@ export class RealtimeGateway
     const timer = this.expiryTimers.get(client.id);
     if (timer) clearTimeout(timer);
     this.expiryTimers.delete(client.id);
+    this.stopTyping(client);
     await this.dropPresence(client);
+  }
+
+  private stopTyping(client: AuthorizedSocket) {
+    const timer = this.typingTimers.get(client.id);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.typingTimers.delete(client.id);
+    if (client.data.taskId)
+      client.to(`task:${client.data.taskId}`).emit('typing.stopped', {
+        taskId: client.data.taskId,
+        userId: client.data.userId,
+        socketId: client.id,
+      });
   }
 
   private async dropPresence(client: AuthorizedSocket) {
@@ -225,5 +249,93 @@ export class RealtimeGateway
       );
       return { ok: false, error: 'presence_unavailable' };
     }
+  }
+
+  @SubscribeMessage('task.join')
+  async joinTask(
+    @ConnectedSocket() client: AuthorizedSocket,
+    @MessageBody() payload: unknown,
+  ) {
+    const input = taskSchema.safeParse(payload);
+    if (!input.success) return { ok: false, error: 'invalid_task' };
+    try {
+      const task = await this.prisma.task.findFirst({
+        where: { id: input.data.taskId, archivedAt: null },
+        select: { boardId: true },
+      });
+      if (!task) return { ok: false, error: 'not_found' };
+      const board = await this.projects.requireBoard(
+        client.data.identity,
+        task.boardId,
+      );
+      await this.dropPresence(client);
+      this.stopTyping(client);
+      if (client.data.taskId) await client.leave(`task:${client.data.taskId}`);
+      for (const room of client.rooms) {
+        if (room.startsWith('board:') || room.startsWith('workspace:'))
+          await client.leave(room);
+      }
+      client.data.taskId = input.data.taskId;
+      await client.join(`task:${input.data.taskId}`);
+      await client.join(`board:${task.boardId}`);
+      await client.join(`workspace:${board.project.workspaceId}`);
+      client.data.boardId = task.boardId;
+      client.data.workspaceId = board.project.workspaceId;
+      try {
+        const online = await this.presence.join(
+          board.project.workspaceId,
+          client.data.userId,
+          client.id,
+        );
+        client.data.presenceRegistered = true;
+        if (online)
+          this.publisher.publishPresence(
+            'presence.online',
+            board.project.workspaceId,
+            client.data.userId,
+            client.data.displayName,
+          );
+      } catch (error) {
+        this.logger.warn(
+          `Task presence join failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'not_found' };
+    }
+  }
+
+  @SubscribeMessage('typing')
+  typing(
+    @ConnectedSocket() client: AuthorizedSocket,
+    @MessageBody() payload: unknown,
+  ) {
+    const input = typingSchema.safeParse(payload);
+    if (
+      !input.success ||
+      client.data.taskId !== input.data.taskId ||
+      !client.rooms.has(`task:${input.data.taskId}`)
+    )
+      return { ok: false, error: 'not_joined' };
+    if (!input.data.active) {
+      this.stopTyping(client);
+      return { ok: true };
+    }
+    if (Date.now() - (client.data.lastTyping ?? 0) < 1000) return { ok: true };
+    client.data.lastTyping = Date.now();
+    const previous = this.typingTimers.get(client.id);
+    if (previous) clearTimeout(previous);
+    client.to(`task:${input.data.taskId}`).emit('typing.started', {
+      taskId: input.data.taskId,
+      userId: client.data.userId,
+      displayName: client.data.displayName,
+      socketId: client.id,
+    });
+    this.typingTimers.set(
+      client.id,
+      setTimeout(() => this.stopTyping(client), 5000),
+    );
+    return { ok: true };
   }
 }

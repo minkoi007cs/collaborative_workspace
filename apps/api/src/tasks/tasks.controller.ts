@@ -209,6 +209,7 @@ export class TasksController {
       { id: taskId, boardId: before.boardId, version: before.version + 1 },
       auth,
     );
+    this.realtime.evictTask(taskId);
     return result;
   }
 
@@ -230,6 +231,7 @@ export class TasksController {
       { id: taskId, boardId: before.boardId, version: before.version + 1 },
       auth,
     );
+    this.realtime.evictTask(taskId);
     return result;
   }
 }

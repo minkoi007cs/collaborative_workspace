@@ -53,11 +53,11 @@ NestJS modules by domain: Auth, Users, Workspaces, Invitations, Projects, Boards
 
 ## 11. Database Architecture
 
-PostgreSQL is durable truth. Prisma schema and checked-in migrations define structure. Foreign keys, unique constraints, transactional writes, and indexed membership/path lookups are required. Initial migration introduced an infrastructure probe table; Phase 2 added `users` with unique `auth_subject`; Phase 3 added `workspaces`, `workspace_members`, and `workspace_invitations` with foreign keys, unique membership, and hashed invitation tokens. Phase 4 added `projects`, `boards`, and `columns` with lineage foreign keys and order indexes. Phase 5 added `tasks`, `task_assignees`, `labels`, and `task_labels`, with a composite task-column/board foreign key and rank uniqueness. Later domain tables arrive with their phases. Never edit production schema manually.
+PostgreSQL is durable truth. Prisma schema and checked-in migrations define structure. Foreign keys, unique constraints, transactional writes, and indexed membership/path lookups are required. Initial migration introduced an infrastructure probe table; Phase 2 added `users` with unique `auth_subject`; Phase 3 added `workspaces`, `workspace_members`, and `workspace_invitations` with foreign keys, unique membership, and hashed invitation tokens. Phase 4 added `projects`, `boards`, and `columns` with lineage foreign keys and order indexes. Phase 5 added `tasks`, `task_assignees`, `labels`, and `task_labels`, with a composite task-column/board foreign key and rank uniqueness. Phase 9 added `comments`, `comment_mentions`, and mention `notifications`. Later domain tables arrive with their phases. Never edit production schema manually.
 
 ## 12. Data Models
 
-Implemented: `User(id, authSubject, email, displayName, createdAt, updatedAt)` with unique Supabase subject; `Workspace(id, name, ownerId, archivedAt)`; `WorkspaceMember(id, workspaceId, userId, role, joinedAt)` with unique workspace/user; `WorkspaceInvitation(id, workspaceId, email, role, tokenHash, expiresAt, acceptedAt, revokedAt, invitedBy)`. Implemented Phase 4: `Project(id, workspaceId, name, description, status, createdBy, archivedAt)`, `Board(id, projectId, name, version)`, and `Column(id, boardId, name, position)`. Implemented Phase 5: `Task(id, boardId, columnId, title, description, rank, priority, dueAt, createdBy, version, completedAt, archivedAt)`, `TaskAssignee(taskId, userId)`, `Label(id, projectId, name, color)`, and `TaskLabel(taskId, labelId)`. All IDs UUID and timestamps UTC. Planned: `Comment`, `Attachment`, `TaskWatcher`, `ActivityEvent`, and `Notification`. Model details are refined with migrations when each feature is implemented.
+Implemented: `User(id, authSubject, email, displayName, createdAt, updatedAt)` with unique Supabase subject; `Workspace(id, name, ownerId, archivedAt)`; `WorkspaceMember(id, workspaceId, userId, role, joinedAt)` with unique workspace/user; `WorkspaceInvitation(id, workspaceId, email, role, tokenHash, expiresAt, acceptedAt, revokedAt, invitedBy)`. Implemented Phase 4: `Project(id, workspaceId, name, description, status, createdBy, archivedAt)`, `Board(id, projectId, name, version)`, and `Column(id, boardId, name, position)`. Implemented Phase 5: `Task(id, boardId, columnId, title, description, rank, priority, dueAt, createdBy, version, completedAt, archivedAt)`, `TaskAssignee(taskId, userId)`, `Label(id, projectId, name, color)`, and `TaskLabel(taskId, labelId)`. Implemented Phase 9: `Comment(id, taskId, authorId, content, version, deletedAt)`, `CommentMention(commentId, userId)`, and `Notification(id, workspaceId, taskId, commentId, recipientId, actorId, type, readAt)` with `MENTION` as the first type. All IDs UUID and timestamps UTC. Planned: `Attachment`, `TaskWatcher`, and `ActivityEvent`. Notification inbox and additional types arrive in Phase 11.
 
 ## 13. Authentication Architecture
 
@@ -65,11 +65,11 @@ Phase 2 implementation: Supabase Auth email/password and Google OAuth via PKCE c
 
 ## 14. Authorization / RBAC
 
-Roles: OWNER (settings, membership roles, transfer, archive); ADMIN (rename, invite, projects/boards/columns); EDITOR (tasks and labels; later comments/files); VIEWER (read only). Phase 3 API checks membership on each workspace path and hides inaccessible workspaces with 404. OWNER cannot be removed/demoted through the role route; transfer changes `ownerId` and both memberships in a serializable transaction. Admin cannot invite admin; no invitation can grant owner. Phase 4 project and board requests resolve workspace lineage server-side and enforce the same membership rules. Phase 5 task requests resolve board/project/workspace lineage and reject assignments to non-members and labels from other projects. Socket board joins resolve the same lineage and membership; removal disconnects that user's sockets. Future nested resources must do the same.
+Roles: OWNER (settings, membership roles, transfer, archive); ADMIN (rename, invite, projects/boards/columns); EDITOR (tasks, labels, comments; later files); VIEWER (read only). Phase 3 API checks membership on each workspace path and hides inaccessible workspaces with 404. OWNER cannot be removed/demoted through the role route; transfer changes `ownerId` and both memberships in a serializable transaction. Admin cannot invite admin; no invitation can grant owner. Phase 4 project and board requests resolve workspace lineage server-side and enforce the same membership rules. Phase 5 task requests resolve board/project/workspace lineage and reject assignments to non-members and labels from other projects. Phase 9 comments inherit task lineage, permit editors to create, and restrict edits/deletes to the author; mentioned emails must resolve to current workspace members. Socket board/task joins resolve the same lineage and membership; removal disconnects that user's sockets. Future nested resources must do the same.
 
 ## 15. REST API Design
 
-Version prefix `/api/v1`. Implemented: `GET /health`; `GET/PATCH /users/me`; `GET/POST /workspaces`, `GET/PATCH/DELETE /workspaces/:id` (DELETE archives), `GET /workspaces/:id/members`, `PATCH/DELETE /workspaces/:id/members/:memberId`, `DELETE /workspaces/:id/members/me`, `POST /workspaces/:id/transfer-ownership`, `GET/POST /workspaces/:id/invitations`, `DELETE /workspaces/:id/invitations/:invitationId`, `POST /invitations/accept`. Invitation create returns a raw token only once and uses `Cache-Control: private, no-store`; there is no email sender yet. Implemented Phase 4: `GET/POST /workspaces/:workspaceId/projects`, `GET/PATCH/DELETE /projects/:projectId`, `GET/POST /projects/:projectId/boards`, `GET /boards/:boardId`, and board column add/rename/delete/order routes. Implemented Phase 5: board task list/create, task read/edit/move/copy/archive/permanent delete, task assignee and label replacement, and project label list/create. Board task lists return 100 items plus cursor. Planned: comment/activity/notification/file/search endpoints. Mutations return canonical state. Validation errors 400, unauthenticated 401, unauthorized 403, absent 404, conflicts 409.
+Version prefix `/api/v1`. Implemented: `GET /health`; `GET/PATCH /users/me`; `GET/POST /workspaces`, `GET/PATCH/DELETE /workspaces/:id` (DELETE archives), `GET /workspaces/:id/members`, `PATCH/DELETE /workspaces/:id/members/:memberId`, `DELETE /workspaces/:id/members/me`, `POST /workspaces/:id/transfer-ownership`, `GET/POST /workspaces/:id/invitations`, `DELETE /workspaces/:id/invitations/:invitationId`, `POST /invitations/accept`. Invitation create returns a raw token only once and uses `Cache-Control: private, no-store`; there is no email sender yet. Implemented Phase 4: `GET/POST /workspaces/:workspaceId/projects`, `GET/PATCH/DELETE /projects/:projectId`, `GET/POST /projects/:projectId/boards`, `GET /boards/:boardId`, and board column add/rename/delete/order routes. Implemented Phase 5: board task list/create, task read/edit/move/copy/archive/permanent delete, task assignee and label replacement, and project label list/create. Phase 9 adds `GET/POST /tasks/:taskId/comments` and `PATCH/DELETE /comments/:commentId`; comment lists return 50 items plus cursor. Planned: activity/notification inbox/file/search endpoints. Mutations return canonical state. Validation errors 400, unauthenticated 401, unauthorized 403, absent 404, conflicts 409.
 
 ## 16. Real-Time Architecture
 
@@ -77,7 +77,7 @@ The `/realtime` Socket.IO namespace uses WebSocket transport and verifies the Su
 
 ## 17. WebSocket Event Catalog
 
-Implemented: `task.created`, `task.updated`, `task.moved`, `task.deleted`, `board.updated`, `presence.online`, and `presence.offline`. Planned: `comment.created`, `comment.updated`, `comment.deleted`, `member.joined`, `member.left`, `typing.started`, `typing.stopped`, and `notification.created`. Task/board envelopes contain `{event,eventId,workspaceId,projectId,boardId,entityId,actorId,version,timestamp,payload}` with empty payloads because clients refetch canonical REST state. Presence envelopes contain workspace, user, event ID, timestamp, and display name; `board.join` and heartbeat acknowledgements return an authorized online-member snapshot.
+Implemented: `task.created`, `task.updated`, `task.moved`, `task.deleted`, `board.updated`, `presence.online/offline`, `comment.created/updated/deleted`, `typing.started/stopped`, and `notification.created` for mentions. Planned: `member.joined/left` and other notification types. Task/board/comment envelopes contain event ID, scope IDs, actor, entity, version, timestamp, and an empty payload; clients refetch canonical REST state. Presence envelopes contain workspace, user, event ID, timestamp, and display name; `board.join` and heartbeat acknowledgements return an authorized online-member snapshot. Typing events are scoped to an authorized task room, rate limited per socket, and expire automatically after five seconds.
 
 ## 18. Presence System
 
@@ -93,7 +93,7 @@ For task moves, snapshot the board task list, apply an immediate local change, s
 
 ## 21. Redis Architecture
 
-Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; later phases add typing TTL, rate-limit state, and the Socket.IO Redis adapter. PostgreSQL remains business truth. Redis outage fails readiness and makes the online indicator unavailable while board REST and socket events continue on a single API instance.
+Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; Phase 9 typing uses a short in-process timer; later phases may move rate-limit state and typing to Redis and add the Socket.IO Redis adapter. PostgreSQL remains business truth. Redis outage fails readiness and makes the online indicator unavailable while board REST and socket events continue on a single API instance.
 
 ## 22. File Storage Architecture
 
@@ -101,7 +101,7 @@ Phase 12: private object bucket with signed upload/download URLs, workspace auth
 
 ## 23. Notification Architecture
 
-Types: TASK_ASSIGNED, MENTION, COMMENT, DUE_DATE, INVITATION, ROLE_CHANGED. Durable per-user records with `readAt`, actor, entity, payload. Real-time event updates the UI count. Recipient authorization and deduplication are required.
+Phase 9 stores `MENTION` notifications for current workspace members in the same transaction as a comment, and emits `notification.created` to that user's room after commit. Phase 11 will add the inbox, read state API/UI, task assignment/comment/due date/invitation/role types, counts, and broader deduplication.
 
 ## 24. Search Architecture
 
@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phases 0–8 are locally implemented and tested using mock JWKS. Phase 8 completes optimistic task move and conflict reconciliation hardening on the Phase 5 version model. Live Supabase/Google flows need project configuration. Next is Phase 9 comments and typing. The first GitHub Actions run still needs review. See `process.md` for exact results.
+Phases 0–9 are locally implemented and tested using mock JWKS. Phase 9 adds task comments, member mentions, and typing events. Live Supabase/Google flows need project configuration. Next is Phase 10 durable activity history. The first GitHub Actions run still needs review. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 
@@ -165,7 +165,7 @@ Phase 0 documentation/governance; 1 monorepo/web/API/Postgres/Redis/health/env/l
 
 ## 39. Known Issues / Technical Debt
 
-Comments, activity, notifications, files, and search are not implemented. Authenticated project/board/task screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub CI status has not been verified and no production deployment exists. Socket publication is best-effort and cannot replay missed events; multi-instance delivery requires the planned Redis adapter. Status is updated in `process.md` after checks.
+Activity history, a notification inbox, files, and search are not implemented. Authenticated project/board/task screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks and task comments load at most 500 across ten pages. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub CI status has not been verified and no production deployment exists. Socket publication is best-effort and cannot replay missed events; multi-instance delivery requires the planned Redis adapter. Status is updated in `process.md` after checks.
 
 ## 40. Architecture Decision Log
 

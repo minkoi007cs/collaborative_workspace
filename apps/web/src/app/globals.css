@@ -685,6 +685,40 @@ button:disabled {
 .task-layout > div > .banner {
   margin-top: 28px;
 }
+.task-discussion {
+  max-width: 920px;
+}
+.comment-list {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}
+.comment-item {
+  border: 1px solid #e8ebf1;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.comment-item p {
+  margin: 0 0 10px;
+}
+.comment-item time {
+  color: #68758b;
+  font-size: 0.82rem;
+}
+.comment-content {
+  white-space: pre-wrap;
+}
+.comment-actions,
+.comment-mention-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.comment-actions details {
+  flex: 1 1 100%;
+}
 .check-list {
   display: grid;
   gap: 8px;

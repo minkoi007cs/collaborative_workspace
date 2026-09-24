@@ -16,18 +16,22 @@ model InfrastructureProbe {
 }
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  authSubject String   @unique @map("auth_subject") @db.Uuid
-  email       String   @db.VarChar(320)
-  displayName String   @map("display_name") @db.VarChar(80)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
-  memberships WorkspaceMember[]
-  sentInvitations WorkspaceInvitation[] @relation("InvitationSender")
-  createdProjects Project[] @relation("ProjectCreator")
-  createdTasks Task[] @relation("TaskCreator")
-  taskAssignments TaskAssignee[]
+  id                    String                @id @default(uuid()) @db.Uuid
+  authSubject           String                @unique @map("auth_subject") @db.Uuid
+  email                 String                @db.VarChar(320)
+  displayName           String                @map("display_name") @db.VarChar(80)
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  ownedWorkspaces       Workspace[]           @relation("WorkspaceOwner")
+  memberships           WorkspaceMember[]
+  sentInvitations       WorkspaceInvitation[] @relation("InvitationSender")
+  createdProjects       Project[]             @relation("ProjectCreator")
+  createdTasks          Task[]                @relation("TaskCreator")
+  taskAssignments       TaskAssignee[]
+  comments              Comment[]             @relation("CommentAuthor")
+  commentMentions       CommentMention[]
+  receivedNotifications Notification[]        @relation("NotificationRecipient")
+  sentNotifications     Notification[]        @relation("NotificationActor")
 
   @@map("users")
 }
@@ -40,16 +44,17 @@ enum WorkspaceRole {
 }
 
 model Workspace {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @db.VarChar(100)
-  ownerId     String   @map("owner_id") @db.Uuid
-  owner       User     @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members     WorkspaceMember[]
-  invitations WorkspaceInvitation[]
-  projects Project[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  archivedAt  DateTime? @map("archived_at")
+  id            String                @id @default(uuid()) @db.Uuid
+  name          String                @db.VarChar(100)
+  ownerId       String                @map("owner_id") @db.Uuid
+  owner         User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members       WorkspaceMember[]
+  invitations   WorkspaceInvitation[]
+  projects      Project[]
+  notifications Notification[]
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  archivedAt    DateTime?             @map("archived_at")
 
   @@index([ownerId])
   @@map("workspaces")
@@ -152,25 +157,27 @@ enum TaskPriority {
 }
 
 model Task {
-  id          String        @id @default(uuid()) @db.Uuid
-  boardId     String        @map("board_id") @db.Uuid
-  columnId    String        @map("column_id") @db.Uuid
-  title       String        @db.VarChar(200)
-  description String?       @db.Text
-  rank        String        @db.VarChar(18)
-  priority    TaskPriority  @default(NONE)
-  dueAt       DateTime?     @map("due_at")
-  createdBy   String        @map("created_by") @db.Uuid
-  version     Int           @default(1)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  completedAt DateTime?     @map("completed_at")
-  archivedAt  DateTime?     @map("archived_at")
-  board       Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  column      Column        @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: Restrict)
-  creator     User          @relation("TaskCreator", fields: [createdBy], references: [id])
-  assignees   TaskAssignee[]
-  labels      TaskLabel[]
+  id            String         @id @default(uuid()) @db.Uuid
+  boardId       String         @map("board_id") @db.Uuid
+  columnId      String         @map("column_id") @db.Uuid
+  title         String         @db.VarChar(200)
+  description   String?        @db.Text
+  rank          String         @db.VarChar(18)
+  priority      TaskPriority   @default(NONE)
+  dueAt         DateTime?      @map("due_at")
+  createdBy     String         @map("created_by") @db.Uuid
+  version       Int            @default(1)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  completedAt   DateTime?      @map("completed_at")
+  archivedAt    DateTime?      @map("archived_at")
+  board         Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column        Column         @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: Restrict)
+  creator       User           @relation("TaskCreator", fields: [createdBy], references: [id])
+  assignees     TaskAssignee[]
+  labels        TaskLabel[]
+  comments      Comment[]
+  notifications Notification[]
 
   @@unique([columnId, rank])
   @@index([boardId, archivedAt])
@@ -212,4 +219,58 @@ model TaskLabel {
   @@id([taskId, labelId])
   @@index([labelId])
   @@map("task_labels")
+}
+
+model Comment {
+  id            String           @id @default(uuid()) @db.Uuid
+  taskId        String           @map("task_id") @db.Uuid
+  authorId      String           @map("author_id") @db.Uuid
+  content       String           @db.VarChar(4000)
+  version       Int              @default(1)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  deletedAt     DateTime?        @map("deleted_at")
+  task          Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author        User             @relation("CommentAuthor", fields: [authorId], references: [id])
+  mentions      CommentMention[]
+  notifications Notification[]
+
+  @@index([taskId, createdAt, id])
+  @@map("comments")
+}
+
+model CommentMention {
+  commentId String  @map("comment_id") @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@index([userId])
+  @@map("comment_mentions")
+}
+
+enum NotificationType {
+  MENTION
+}
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  taskId      String           @map("task_id") @db.Uuid
+  commentId   String           @map("comment_id") @db.Uuid
+  recipientId String           @map("recipient_id") @db.Uuid
+  actorId     String           @map("actor_id") @db.Uuid
+  type        NotificationType
+  createdAt   DateTime         @default(now()) @map("created_at")
+  readAt      DateTime?        @map("read_at")
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  comment     Comment          @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id])
+
+  @@index([recipientId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@map("notifications")
 }

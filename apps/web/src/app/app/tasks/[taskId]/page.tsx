@@ -3,10 +3,12 @@ import { notFound, redirect } from 'next/navigation';
 import { ApiError, apiRequest } from '@/lib/api/server';
 import type {
   Board,
+  CommentPage,
   Member,
   Profile,
   Project,
   Task,
+  TaskComment,
   TaskLabel,
   TaskPage as TaskListResponse,
 } from '@/lib/api/types';
@@ -22,6 +24,7 @@ import {
   updateTask,
 } from '../../task-actions';
 import { ConfirmButton } from '../../workspaces/[workspaceId]/confirm-button';
+import { TaskDiscussion } from './task-discussion';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +33,13 @@ export default async function TaskPage({
   searchParams,
 }: {
   params: Promise<{ taskId: string }>;
-  searchParams: Promise<{ error?: string; updated?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    updated?: string;
+    comment?: string;
+    commentError?: string;
+    commentPages?: string;
+  }>;
 }) {
   const { taskId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) notFound();
@@ -57,12 +66,14 @@ export default async function TaskPage({
   let profile: Profile;
   let labels: TaskLabel[];
   let firstTasks: TaskListResponse;
+  let commentPage: CommentPage;
   try {
-    [members, profile, labels, firstTasks] = await Promise.all([
+    [members, profile, labels, firstTasks, commentPage] = await Promise.all([
       apiRequest<Member[]>(`/workspaces/${project.workspaceId}/members`),
       apiRequest<Profile>('/users/me'),
       apiRequest<TaskLabel[]>(`/projects/${project.id}/labels`),
       apiRequest<TaskListResponse>(`/boards/${board.id}/tasks`),
+      apiRequest<CommentPage>(`/tasks/${taskId}/comments`),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login');
@@ -87,6 +98,19 @@ export default async function TaskPage({
   const peers = firstTasks.items.filter(
     (item) => item.columnId === task.columnId && item.id !== taskId,
   );
+  const pageCount = Math.min(
+    Math.max(Number(notices.commentPages) || 1, 1),
+    10,
+  );
+  const comments: TaskComment[] = [...commentPage.items];
+  let nextCommentCursor = commentPage.nextCursor;
+  for (let page = 1; page < pageCount && nextCommentCursor; page++) {
+    const next = await apiRequest<CommentPage>(
+      `/tasks/${taskId}/comments?cursor=${nextCommentCursor}`,
+    );
+    comments.push(...next.items);
+    nextCommentCursor = next.nextCursor;
+  }
 
   return (
     <div className="shell">
@@ -408,6 +432,17 @@ export default async function TaskPage({
             )}
           </div>
         </div>
+        <TaskDiscussion
+          taskId={taskId}
+          comments={comments}
+          members={members}
+          currentUserId={profile.id}
+          canComment={canEdit}
+          more={Boolean(nextCommentCursor) && pageCount < 10}
+          pageCount={pageCount}
+          notice={notices.comment}
+          error={notices.commentError}
+        />
       </main>
     </div>
   );
