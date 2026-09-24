@@ -6,7 +6,7 @@ Current Phase: Phase 12 private attachments implemented locally; Phase 14 harden
 Current Milestone: Private task file upload, download, and deletion with server-side authorization
 Current Branch: main
 Current Focus: Configure and validate Supabase Auth and private Storage, then continue production hardening
-Last Completed Feature: Phase 12 private task attachments with local integration tests and production builds
+Last Completed Feature: Phase 12 private task attachments with local integration, production builds, and passing GitHub CI
 Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent
 Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA
 
@@ -1465,3 +1465,81 @@ Phase 12 is implemented and locally tested with a fake storage adapter. Real buc
 ### Next Recommended Task
 
 Configure a private bucket and Supabase Auth, then test the full signed upload/download journey in a browser and review remote CI.
+
+## [2026-09-24] Change ID: PROC-018
+
+Author: Codex
+Branch: main
+Planned Commit Message: `docs(process): record Phase 12 CI result`
+
+### Summary
+
+Confirmed the pushed Phase 12 commit passed GitHub Actions and corrected stale roadmap status text.
+
+### Reason
+
+The Phase 12 entry was written before remote CI finished, and two `tech.nmd` sections still described attachments as unimplemented.
+
+### Features Added
+
+- Remote CI evidence: run `36043393464` for commit `2bb215a` completed successfully; both `checks` and `process` jobs passed.
+
+### Features Modified
+
+- Current status and known issues now distinguish locally implemented attachments from live Supabase Storage validation.
+
+### Features Removed
+
+- Stale statement that files were not implemented.
+
+### Files / Modules Affected
+
+- `process.md` and `tech.nmd`.
+
+### Database Changes
+
+- None.
+
+### API Changes
+
+- None.
+
+### WebSocket Changes
+
+- None.
+
+### Security Impact
+
+- Documentation still explicitly requires a private bucket, server-only service-role key, and live validation.
+
+### Tests Added or Updated
+
+- None.
+
+### Tests Run
+
+- GitHub Actions run `36043393464`: completed successfully, with both jobs green. Local validation is recorded in PROC-017.
+
+### Known Problems
+
+- No live Supabase Auth or Storage configuration; invitation email delivery, storage reconciliation, deployment, and multi-instance socket delivery remain open.
+
+### Technical Debt Introduced
+
+- None.
+
+### Architecture Decisions
+
+- Keep implementation status separate from live external-service validation.
+
+### tech.nmd Updated?
+
+Yes; current phase and known issues corrected.
+
+### Current Project State After This Change
+
+Phase 12 code is on `main` and remote CI is green. This documentation update remains to be committed and pushed.
+
+### Next Recommended Task
+
+Set up Supabase Auth and private Storage for live QA, then continue remaining product and operations work.
