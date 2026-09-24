@@ -9,11 +9,12 @@ import { PrismaClient } from '@prisma/client';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { io, type Socket } from 'socket.io-client';
 import { AppModule } from '../src/app.module';
+import { RedisIoAdapter } from '../src/realtime/redis-io.adapter';
 
-function waitFor<T>(socket: Socket, event: string): Promise<T> {
+function waitFor<T>(socket: Socket, event: string, label = event): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`Timed out waiting for ${event}`)),
+      () => reject(new Error(`Timed out waiting for ${label}`)),
       3000,
     );
     socket.once(event, (value: T) => {
@@ -45,11 +46,28 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
     logger: false,
     abortOnError: false,
   });
+  const adapter = new RedisIoAdapter(app);
+  await adapter.connect(process.env.REDIS_URL ?? 'redis://localhost:56379');
+  app.useWebSocketAdapter(adapter);
   app.setGlobalPrefix('api/v1');
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address();
   assert.ok(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
+  const secondApp = await NestFactory.create(AppModule, {
+    logger: false,
+    abortOnError: false,
+  });
+  const secondAdapter = new RedisIoAdapter(secondApp);
+  await secondAdapter.connect(
+    process.env.REDIS_URL ?? 'redis://localhost:56379',
+  );
+  secondApp.useWebSocketAdapter(secondAdapter);
+  secondApp.setGlobalPrefix('api/v1');
+  await secondApp.listen(0, '127.0.0.1');
+  const secondAddress = secondApp.getHttpServer().address();
+  assert.ok(secondAddress && typeof secondAddress !== 'string');
+  const secondOrigin = `http://127.0.0.1:${secondAddress.port}`;
   const base = `${origin}/api/v1`;
   const prisma = new PrismaClient();
   const sockets: Socket[] = [];
@@ -83,8 +101,8 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
       body: body ? JSON.stringify(body) : undefined,
     });
   }
-  function socket(bearer: string) {
-    const client = io(`${origin}/realtime`, {
+  function socket(bearer: string, targetOrigin = origin) {
+    const client = io(`${targetOrigin}/realtime`, {
       autoConnect: false,
       transports: ['websocket'],
       reconnection: false,
@@ -157,7 +175,7 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
       .emitWithAck('board.join', { boardId: board.id });
     assert.deepEqual(denied, { ok: false, error: 'not_found' });
 
-    const watcher = socket(viewer);
+    const watcher = socket(viewer, secondOrigin);
     const watcherConnected = waitFor<void>(watcher, 'connect');
     watcher.connect();
     await watcherConnected;
@@ -224,7 +242,7 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
         .emitWithAck('task.join', { taskId: task.id }),
       { ok: false, error: 'not_found' },
     );
-    const taskWatcher = socket(viewer);
+    const taskWatcher = socket(viewer, secondOrigin);
     const taskActor = socket(owner);
     const taskWatcherConnected = waitFor<void>(taskWatcher, 'connect');
     const taskActorConnected = waitFor<void>(taskActor, 'connect');
@@ -304,7 +322,7 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
       2,
     );
 
-    const secondViewer = socket(viewer);
+    const secondViewer = socket(viewer, secondOrigin);
     const secondConnected = waitFor<void>(secondViewer, 'connect');
     secondViewer.connect();
     await secondConnected;
@@ -339,7 +357,11 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
       (member) => member.user.email === 'realtime-1@example.test',
     );
     assert.ok(viewerMember);
-    const disconnected = waitFor<string>(secondViewer, 'disconnect');
+    const disconnected = waitFor<string>(
+      secondViewer,
+      'disconnect',
+      'removed remote viewer disconnect',
+    );
     const offline = waitFor<{ entityId: string }>(
       otherWatcher,
       'presence.offline',
@@ -356,15 +378,24 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
     );
     await disconnected;
     assert.equal(secondViewer.connected, false);
+    assert.equal(taskWatcher.connected, false);
     assert.ok((await offline).entityId);
-    const taskSocketClosed = waitFor<string>(taskActor, 'disconnect');
+    const taskSocketClosed = waitFor<string>(
+      taskActor,
+      'disconnect',
+      'local task socket disconnect',
+    );
     assert.equal(
       (await send(`/tasks/${task.id}`, owner, 'DELETE', { expectedVersion: 1 }))
         .status,
       200,
     );
     await taskSocketClosed;
-    const archivedSocket = waitFor<string>(otherWatcher, 'disconnect');
+    const archivedSocket = waitFor<string>(
+      otherWatcher,
+      'disconnect',
+      'archived project socket disconnect',
+    );
     assert.equal(
       (await send(`/projects/${project.id}`, owner, 'DELETE')).status,
       200,
@@ -379,6 +410,7 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
     await prisma.user.deleteMany({ where: { authSubject: { in: subject } } });
     await prisma.$disconnect();
     await app.close();
+    await secondApp.close();
     keyServer.close();
     if (oldUrl === undefined) delete process.env.SUPABASE_URL;
     else process.env.SUPABASE_URL = oldUrl;

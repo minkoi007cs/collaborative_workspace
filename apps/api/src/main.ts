@@ -2,10 +2,14 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { loadConfig } from './config';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap() {
   const config = loadConfig();
   const app = await NestFactory.create(AppModule);
+  const socketAdapter = new RedisIoAdapter(app);
+  await socketAdapter.connect(config.REDIS_URL);
+  app.useWebSocketAdapter(socketAdapter);
   app.setGlobalPrefix('api/v1');
   app.enableCors({ origin: config.WEB_ORIGIN });
   app.use(

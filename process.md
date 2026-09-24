@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 12 private attachments implemented locally; Phase 14 hardening continues
-Current Milestone: Private task file upload, download, and deletion with server-side authorization
+Current Phase: Phase 16 cross-instance Socket.IO fanout implemented locally; Phase 14 hardening continues
+Current Milestone: Redis-backed room events and remote socket revocation
 Current Branch: main
-Current Focus: Configure and validate Supabase Auth and private Storage, then continue production hardening
-Last Completed Feature: Phase 12 private task attachments with local integration, production builds, and passing GitHub CI
-Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent
-Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA
+Current Focus: Verify Phase 16 in remote CI, then configure and validate Supabase Auth and private Storage
+Last Completed Feature: Two-instance realtime integration test passes with the Socket.IO Redis adapter
+Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay; archive restore absent
+Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA; plan deployment operations
 
 ---
 
@@ -1543,3 +1543,86 @@ Phase 12 code is on `main` and remote CI is green. This documentation update rem
 ### Next Recommended Task
 
 Set up Supabase Auth and private Storage for live QA, then continue remaining product and operations work.
+
+## [2026-09-24] Change ID: PROC-019
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(realtime): fan out socket rooms through Redis`
+
+### Summary
+
+Added the Socket.IO Redis adapter so authenticated room events and remote socket revocations reach clients connected to another API instance.
+
+### Reason
+
+The existing Redis presence lease worked across processes, but Socket.IO rooms and broadcasts were local. A member removed through one instance could remain connected to another instance, and task changes could miss remote viewers.
+
+### Features Added
+
+- Redis pub/sub Socket.IO adapter initialized before the API starts listening, with publisher and subscriber connections closed on shutdown.
+- Two-instance integration coverage for task/comment/notification room events, member revocation, and presence behavior.
+
+### Features Modified
+
+- API startup requires Redis pub/sub connectivity. Documentation now describes cross-instance fanout and remaining best-effort delivery limits.
+
+### Features Removed
+
+- Single-process-only Socket.IO room delivery in production bootstrap.
+
+### Files / Modules Affected
+
+- API `main.ts`, new `realtime/redis-io.adapter.ts`, realtime integration test, package manifest/lockfile, README, architecture, audit, and process documentation.
+
+### Database Changes
+
+- None.
+
+### API Changes
+
+- No REST contract changes.
+
+### WebSocket Changes
+
+- Socket.IO room broadcasts and `disconnectSockets` now use a shared Redis adapter across API instances. WebSocket-only clients already satisfy the load balancer transport requirement.
+
+### Security Impact
+
+- Membership removal and task/project/workspace revocations can disconnect sockets on another instance, reducing stale authorized subscriptions. A Redis outage after startup can still interrupt delivery; clients refetch canonical REST data on reconnect.
+
+### Tests Added or Updated
+
+- Realtime integration test now launches two Nest API instances, connects viewers to the second, performs mutations on the first, and verifies remote delivery and revocation.
+
+### Tests Run
+
+- Biome format and lint: passed on 109 files; API/web typechecks passed.
+- Governance tests: 2 passed; API unit tests: 3 passed; web unit test: 1 passed.
+- Full API integration suite: 6 passed with local PostgreSQL and Redis, including the two-instance test.
+- API and Next.js production builds passed.
+- Remote GitHub Actions for this commit: pending.
+
+### Known Problems
+
+- Socket publication remains best effort after REST writes, with no durable replay. Redis interruption after startup can lose room events. Live Supabase authentication and real storage upload remain unverified.
+
+### Technical Debt Introduced
+
+- Add a durable event outbox or replay if stronger delivery guarantees are required. Deployment needs shared Redis and WebSocket-capable ingress.
+
+### Architecture Decisions
+
+- Use the official Socket.IO Redis adapter with existing `ioredis` clients. Fail startup when Redis pub/sub cannot connect rather than serve a multi-instance realtime feature that silently fragments.
+
+### tech.nmd Updated?
+
+Yes; realtime, Redis, deployment, testing, current status, and ADR-003 updated.
+
+### Current Project State After This Change
+
+Phase 16 is implemented and locally verified across two API instances. This commit has not yet been pushed or checked by remote CI.
+
+### Next Recommended Task
+
+Verify GitHub Actions, then configure Supabase Auth and Storage for end-to-end QA and prepare deployment operations.

@@ -73,7 +73,7 @@ Version prefix `/api/v1`. Implemented: `GET /health`; `GET/PATCH /users/me`; `GE
 
 ## 16. Real-Time Architecture
 
-The `/realtime` Socket.IO namespace uses WebSocket transport and verifies the Supabase bearer token during handshake. The server enforces `WEB_ORIGIN`, disconnects at JWT expiry, and checks workspace membership through board lineage on each `board.join`. A connection joins one `board:{id}` and `workspace:{id}` room plus its `user:{id}` room; switching boards clears previous board/workspace rooms. Membership removal and project/workspace archive disconnect affected sockets. REST mutations publish best-effort events after durable commit. The board client deduplicates event IDs and refetches on reconnect, including after token expiry. Redis tracks workspace presence by socket. There is no durable event replay/outbox or cross-instance socket adapter yet; missed publications require a page refresh or reconnection. The adapter is planned for Phase 16.
+The `/realtime` Socket.IO namespace uses WebSocket transport and verifies the Supabase bearer token during handshake. The server enforces `WEB_ORIGIN`, disconnects at JWT expiry, and checks workspace membership through board lineage on each `board.join`. A connection joins one `board:{id}` and `workspace:{id}` room plus its `user:{id}` room; switching boards clears previous board/workspace rooms. Membership removal and project/workspace archive disconnect affected sockets, including sockets on other API instances through the Redis adapter. REST mutations publish best-effort events after durable commit. The board client deduplicates event IDs and refetches on reconnect, including after token expiry. Redis tracks workspace presence by socket and distributes Socket.IO room events. API startup requires Redis pub/sub connectivity. There is no durable event replay/outbox; missed publications require a page refresh or reconnection.
 
 ## 17. WebSocket Event Catalog
 
@@ -81,7 +81,7 @@ Implemented: `task.created`, `task.updated`, `task.moved`, `task.deleted`, `boar
 
 ## 18. Presence System
 
-Implemented Redis sorted sets per workspace/user with one 90-second lease per socket plus a workspace user index. A Lua script atomically prunes expired socket leases, renews a heartbeat, and detects the first active socket; another script removes only the disconnecting socket and detects the last. The board client heartbeats every 30 seconds; snapshots prune expired users and filter against current workspace membership. A socket join and each heartbeat check board authorization. `presence.online/offline` events update open boards; periodic snapshots recover from missed disconnect events or process crashes. Redis errors degrade only the online indicator, leaving authorized board events usable. Presence never becomes permanent PostgreSQL truth. Multi-instance event fanout remains Phase 16.
+Implemented Redis sorted sets per workspace/user with one 90-second lease per socket plus a workspace user index. A Lua script atomically prunes expired socket leases, renews a heartbeat, and detects the first active socket; another script removes only the disconnecting socket and detects the last. The board client heartbeats every 30 seconds; snapshots prune expired users and filter against current workspace membership. A socket join and each heartbeat check board authorization. `presence.online/offline` events update open boards; periodic snapshots recover from missed disconnect events or process crashes. Redis errors after startup can degrade the online indicator and socket fanout; REST remains canonical. Presence never becomes permanent PostgreSQL truth. Phase 16 adds Redis pub/sub for multi-instance Socket.IO events and room operations.
 
 ## 19. Concurrency Strategy
 
@@ -93,7 +93,7 @@ For task moves, snapshot the board task list, apply an immediate local change, s
 
 ## 21. Redis Architecture
 
-Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; Phase 9 typing uses a short in-process timer. Phase 14 uses Redis fixed-window counters for invitation create/accept limits across API instances. The Socket.IO Redis adapter remains planned. PostgreSQL remains business truth. Redis outage fails readiness, makes presence unavailable, and causes invitation routes to return 503 because their abuse limits cannot be enforced; other board REST and socket events continue on a single API instance.
+Phase 1 connection check proves configuration. Phase 7 uses Redis for ephemeral socket presence; Phase 9 typing uses a short in-process timer. Phase 14 uses Redis fixed-window counters for invitation create/accept and attachment upload limits across API instances. Phase 16 uses independent Redis publisher/subscriber clients for Socket.IO room events and remote disconnects. PostgreSQL remains business truth. Redis outage before startup prevents API boot because cross-instance socket fanout cannot be established. An outage after startup fails readiness, makes presence unavailable, and causes rate-limited routes to return 503; REST mutations remain canonical while socket delivery can be missed.
 
 ## 22. File Storage Architecture
 
@@ -125,7 +125,7 @@ Unit: permissions, versioning, ranking, invitation validation, event constructio
 
 ## 29. CI/CD
 
-GitHub Actions checks each non-merge commit for `process.md`, then installs dependencies, runs format, lint, typecheck, unit and integration tests, and builds. Postgres and Redis service containers support integration. Deployment and production release gates arrive in Phase 15.
+GitHub Actions checks each non-merge commit for `process.md`, then installs dependencies, runs format, lint, typecheck, unit and integration tests, and builds. Postgres and Redis service containers support integration, including two API instances in the realtime test. Deployment and production release gates arrive in Phase 15.
 
 ## 30. Environment Variables
 
@@ -137,7 +137,7 @@ Node 20+, pnpm 10+, Docker. `pnpm install`, `docker compose up -d`, `pnpm db:mig
 
 ## 32. Deployment Architecture
 
-Planned: separate web and API services, managed PostgreSQL/Redis, private object storage. Terminate TLS at ingress; isolate DB/Redis networks; use managed secret injection, migrations before API rollout, rollback procedures, and backups. No production deployment exists yet. For multiple Socket.IO instances, document transport/sticky-session settings and shared Redis adapter in Phase 16.
+Planned: separate web and API services, managed PostgreSQL/Redis, private object storage. Terminate TLS at ingress; isolate DB/Redis networks; use managed secret injection, migrations before API rollout, rollback procedures, and backups. No production deployment exists yet. Socket clients use WebSocket transport; the Redis adapter shares room events and remote disconnects across API instances. Configure load balancer WebSocket support and route all instances to the same Redis deployment.
 
 ## 33. Database Migration Rules
 
@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phases 0–10, Phase 11 inbox/core notification events/due reminders, Phase 12 private attachments, Phase 13 task search, and part of Phase 14 security hardening are implemented and locally tested using mock JWKS and storage. Phase 11 invitation email delivery remains open. Live Supabase Auth, Google, and Storage flows need project configuration. GitHub Actions run `36043393464` passed both checks and process jobs for the Phase 12 commit. See `process.md` for exact results.
+Phases 0–10, Phase 11 inbox/core notification events/due reminders, Phase 12 private attachments, Phase 13 task search, part of Phase 14 security hardening, and Phase 16 cross-instance Socket.IO delivery are implemented and locally tested using mock JWKS and storage. Phase 11 invitation email delivery remains open. Live Supabase Auth, Google, and Storage flows need project configuration. GitHub Actions run `36043393464` passed both checks and process jobs for the Phase 12 commit; Phase 16 remote CI is pending. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 
@@ -165,7 +165,7 @@ Phase 0 documentation/governance; 1 monorepo/web/API/Postgres/Redis/health/env/l
 
 ## 39. Known Issues / Technical Debt
 
-File metadata and authorization are implemented, but a real private bucket, upload CORS, and authenticated browser flow remain unverified. Pending uploads and failed storage cleanup need reconciliation. Search currently covers task title and description within one workspace and caps results at ten pages; project/board/comment/file content is not searched. Notification inbox reads need page refresh; due reminders are delivered to the inbox only and a scan can be delayed by up to 15 minutes. Activity writes are best effort after primary mutations, so a failed write can leave a gap; an outbox or transactional write path is needed for stronger guarantees. Authenticated project/board/task/notification/search screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks and task comments/activity load at most 500 entries each across ten pages; notifications load at most 500 entries. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub Actions has a passing remote run, but no production deployment exists. Socket publication is best-effort and cannot replay missed events; multi-instance delivery requires the planned Redis adapter. Status is updated in `process.md` after checks.
+File metadata and authorization are implemented, but a real private bucket, upload CORS, and authenticated browser flow remain unverified. Pending uploads and failed storage cleanup need reconciliation. Search currently covers task title and description within one workspace and caps results at ten pages; project/board/comment/file content is not searched. Notification inbox reads need page refresh; due reminders are delivered to the inbox only and a scan can be delayed by up to 15 minutes. Activity writes are best effort after primary mutations, so a failed write can leave a gap; an outbox or transactional write path is needed for stronger guarantees. Authenticated project/board/task/notification/search screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks and task comments/activity load at most 500 entries each across ten pages; notifications load at most 500 entries. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub Actions has a passing remote run, but no production deployment exists. Socket publication is best-effort and cannot replay missed events; Redis outage after startup can interrupt cross-instance delivery. Status is updated in `process.md` after checks.
 
 ## 40. Architecture Decision Log
 
@@ -176,7 +176,7 @@ Status: Accepted. Context: modular API with guards and socket gateway needed. De
 Status: Accepted. Context: relational collaborative data and migrations. Decision: PostgreSQL plus Prisma with checked-in migrations. Alternatives Considered: document store, raw SQL. Consequences: transactional constraints and type-safe access; ORM version must be pinned and migrations reviewed.
 
 ### ADR-003 — Socket.IO and Redis
-Status: Socket.IO implemented in Phase 6 and Redis presence in Phase 7; Redis adapter planned. Context: authorized rooms, reconnection, multiple API instances. Decision: Socket.IO with REST refresh after small invalidation events and Redis leases for presence; add a Redis adapter in Phase 16. Alternatives Considered: raw WebSocket and database polling. Consequences: extra infrastructure and protocol versioning; REST remains authoritative. Best-effort publication has no durable replay.
+Status: Socket.IO implemented in Phase 6, Redis presence in Phase 7, and Redis adapter in Phase 16. Context: authorized rooms, reconnection, multiple API instances. Decision: Socket.IO with REST refresh after small invalidation events, Redis leases for presence, and Redis pub/sub for cross-instance room events. Alternatives Considered: raw WebSocket and database polling. Consequences: extra infrastructure and protocol versioning; REST remains authoritative. Best-effort publication has no durable replay.
 
 ### ADR-004 — Task ranking and versioning
 Status: Accepted for Phase 5/8 implementation. Context: moves and conflicting edits. Decision: lexicographic ranks plus compare-and-swap integer versions. Alternatives Considered: renumbering all positions, last-write-wins. Consequences: occasional rebalance transaction; explicit conflict UI.

@@ -13,7 +13,7 @@ flowchart LR
   A --> R[(Redis)]
 ```
 
-PostgreSQL holds durable product state. Redis holds ephemeral workspace presence; cross-instance socket delivery remains planned. `tech.nmd` is the authoritative engineering specification and roadmap; `process.md` records what is actually implemented.
+PostgreSQL holds durable product state. Redis holds ephemeral workspace presence and fans Socket.IO events across API instances. `tech.nmd` is the authoritative engineering specification and roadmap; `process.md` records what is actually implemented.
 
 ## Local development
 
@@ -34,7 +34,7 @@ For task files, set the server-only `SUPABASE_SERVICE_ROLE_KEY` and create the `
 
 Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Workspace owners and admins can create projects, add boards, and manage ordered columns. Editors and above can create and edit tasks, assign workspace members, add labels, set priority/due date, copy/archive tasks, and move them by drag/drop or keyboard controls. Task and column changes detect stale versions. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces and projects cannot currently be restored in the UI.
 
-Board pages join an authorized Socket.IO room and refresh after task or column events. Connections use the current Supabase access token, are closed when it expires or membership is removed, and rejoin after reconnection. A visible status tells users when live updates are unavailable. REST remains the source of truth; there is no durable event replay or multi-instance socket adapter yet.
+Board pages join an authorized Socket.IO room and refresh after task or column events. Connections use the current Supabase access token, are closed when it expires or membership is removed, and rejoin after reconnection. A visible status tells users when live updates are unavailable. REST remains the source of truth; there is no durable event replay. API startup requires Redis for cross-instance socket fanout. Socket clients use WebSocket transport, so a load balancer does not need polling affinity.
 
 The board shows online workspace members. Redis leases track each socket separately, so another tab keeps a member online when one tab closes. The client sends a heartbeat every 30 seconds; leases expire after 90 seconds and each heartbeat refreshes the displayed list. Presence is temporary and is not written to PostgreSQL.
 
