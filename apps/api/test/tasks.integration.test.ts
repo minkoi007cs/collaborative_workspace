@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { AppModule } from '../src/app.module';
 import { DueReminderService } from '../src/notifications/due-reminder.service';
+import { StorageService } from '../src/attachments/storage.service';
 
 test('tasks enforce workspace roles, board lineage, membership, rank and versions', async () => {
   const { publicKey, privateKey } = await generateKeyPair('ES256');
@@ -32,6 +33,16 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     logger: false,
     abortOnError: false,
   });
+  const storage = app.get(StorageService);
+  const removedPaths: string[] = [];
+  storage.signUpload = async (path) =>
+    `https://storage.example.test/upload/${path}`;
+  storage.info = async () => ({ size: 4, contentType: 'text/plain' });
+  storage.signDownload = async (path) =>
+    `https://storage.example.test/download/${path}`;
+  storage.remove = async (path) => {
+    removedPaths.push(path);
+  };
   app.setGlobalPrefix('api/v1');
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address();
@@ -140,6 +151,113 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     assert.equal(task.rank.length, 18);
     assert.equal((await send(`/tasks/${task.id}`, viewer)).status, 200);
     assert.equal((await send(`/tasks/${task.id}`, outsider)).status, 404);
+    assert.equal(
+      (await send(`/tasks/${task.id}/attachments`, outsider)).status,
+      404,
+    );
+    assert.deepEqual(
+      await (await send(`/tasks/${task.id}/attachments`, viewer)).json(),
+      [],
+    );
+    assert.equal(
+      (
+        await send(`/tasks/${task.id}/attachments/upload-url`, viewer, 'POST', {
+          fileName: 'note.txt',
+          contentType: 'text/plain',
+          size: 4,
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await send(`/tasks/${task.id}/attachments/upload-url`, editor, 'POST', {
+          fileName: '../bad.txt',
+          contentType: 'text/plain',
+          size: 4,
+        })
+      ).status,
+      400,
+    );
+    const uploadResponse = await send(
+      `/tasks/${task.id}/attachments/upload-url`,
+      editor,
+      'POST',
+      { fileName: 'note.txt', contentType: 'text/plain', size: 4 },
+    );
+    assert.equal(uploadResponse.status, 201);
+    const uploaded = (await uploadResponse.json()) as {
+      attachment: { id: string };
+      signedUrl: string;
+    };
+    assert.match(
+      uploaded.signedUrl,
+      /^https:\/\/storage\.example\.test\/upload\//,
+    );
+    assert.deepEqual(
+      await (await send(`/tasks/${task.id}/attachments`, viewer)).json(),
+      [],
+    );
+    assert.equal(
+      (
+        await send(
+          `/tasks/${task.id}/attachments/${uploaded.attachment.id}/finalize`,
+          owner,
+          'POST',
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await send(
+          `/tasks/${task.id}/attachments/${uploaded.attachment.id}/finalize`,
+          editor,
+          'POST',
+        )
+      ).status,
+      201,
+    );
+    const listedAttachments = (await (
+      await send(`/tasks/${task.id}/attachments`, viewer)
+    ).json()) as Array<{ id: string }>;
+    assert.deepEqual(
+      listedAttachments.map((attachment) => attachment.id),
+      [uploaded.attachment.id],
+    );
+    assert.equal(
+      (
+        await send(
+          `/attachments/${uploaded.attachment.id}/download-url`,
+          outsider,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await send(
+          `/attachments/${uploaded.attachment.id}/download-url`,
+          viewer,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await send(`/attachments/${uploaded.attachment.id}`, viewer, 'DELETE'))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await send(`/attachments/${uploaded.attachment.id}`, owner, 'DELETE'))
+        .status,
+      200,
+    );
+    assert.equal(removedPaths.length, 1);
+    assert.deepEqual(
+      await (await send(`/tasks/${task.id}/attachments`, viewer)).json(),
+      [],
+    );
     assert.equal(
       (await send(`/workspaces/${workspaceId}/search?q=release`, outsider))
         .status,

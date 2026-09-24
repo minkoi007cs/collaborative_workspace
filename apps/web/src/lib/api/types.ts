@@ -78,6 +78,16 @@ export type Task = {
 };
 
 export type TaskPage = { items: Task[]; nextCursor: string | null };
+export type TaskAttachment = {
+  id: string;
+  taskId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+  uploadedAt: string | null;
+  uploader: { id: string; displayName: string };
+};
 export type TaskComment = {
   id: string;
   taskId: string;

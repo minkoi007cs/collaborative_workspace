@@ -38,6 +38,9 @@ importers:
       '@prisma/client':
         specifier: ^6.16.2
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@supabase/supabase-js':
+        specifier: ^2.117.0
+        version: 2.117.0
       ioredis:
         specifier: ^5.8.2
         version: 5.11.1

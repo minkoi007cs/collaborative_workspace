@@ -33,6 +33,7 @@ model User {
   receivedNotifications Notification[]        @relation("NotificationRecipient")
   sentNotifications     Notification[]        @relation("NotificationActor")
   activityEvents        ActivityEvent[]
+  uploadedAttachments   Attachment[]          @relation("AttachmentUploader")
 
   @@map("users")
 }
@@ -182,6 +183,7 @@ model Task {
   comments       Comment[]
   notifications  Notification[]
   activityEvents ActivityEvent[]
+  attachments    Attachment[]
 
   @@unique([columnId, rank])
   @@index([boardId, archivedAt])
@@ -283,6 +285,29 @@ model Notification {
   @@index([recipientId, createdAt])
   @@index([workspaceId, createdAt])
   @@map("notifications")
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
+}
+
+model Attachment {
+  id            String           @id @default(uuid()) @db.Uuid
+  taskId        String           @map("task_id") @db.Uuid
+  uploaderId    String           @map("uploader_id") @db.Uuid
+  fileName      String           @map("file_name") @db.VarChar(255)
+  contentType   String           @map("content_type") @db.VarChar(100)
+  size          Int
+  storagePath   String           @unique @map("storage_path") @db.VarChar(255)
+  status        AttachmentStatus @default(PENDING)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  uploadedAt    DateTime?        @map("uploaded_at")
+  task          Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader      User             @relation("AttachmentUploader", fields: [uploaderId], references: [id])
+
+  @@index([taskId, status, createdAt])
+  @@map("attachments")
 }
 
 enum ActivityType {

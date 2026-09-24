@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a workspace and task collaboration platform under development. Phases 1–10 cover the foundation, authentication, workspaces, projects, tasks, live board updates, presence, conflict handling, comments, and activity history. Phase 11 includes a notification inbox, read state, and due-date reminders; invitation email delivery and production operations remain on the roadmap.
+SyncSpace is a workspace and task collaboration platform under development. Phases 1–10 cover the foundation, authentication, workspaces, projects, tasks, live board updates, presence, conflict handling, comments, and activity history. Phase 11 includes a notification inbox, read state, and due-date reminders. Phase 12 adds private task attachments; invitation email delivery and production operations remain on the roadmap.
 
 ## Architecture
 
@@ -29,6 +29,8 @@ pnpm dev
 The Docker services use host ports 55432 (PostgreSQL) and 56379 (Redis) to avoid common local port conflicts.
 
 For sign-up and login, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_URL` in `.env` to the same Supabase project. Enable email/password and Google in Supabase Auth, use an asymmetric JWT signing key, and allow `http://localhost:3000/auth/callback` as a redirect URL. The API verifies the provider's JWKS independently. Without this configuration, the account controls show an availability state. The login flow cannot be tested against a real provider until these values exist.
+
+For task files, set the server-only `SUPABASE_SERVICE_ROLE_KEY` and create the `STORAGE_BUCKET` in the same Supabase project. Keep the bucket private, set its file-size limit to **10 MB or less**, and restrict its allowed MIME types to a subset of `application/pdf`, `image/jpeg`, `image/png`, `image/webp`, and `text/plain`. The API verifies these bucket settings before signing an upload or download. Editors can upload, viewers can download, and an uploader or workspace admin can delete a file. A file appears only after the API checks the stored object's size and MIME type. The browser uploads directly through a short-lived signed URL; the service-role key stays on the API. Live bucket behavior and browser CORS still require a configured Supabase project to verify.
 
 Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Workspace owners and admins can create projects, add boards, and manage ordered columns. Editors and above can create and edit tasks, assign workspace members, add labels, set priority/due date, copy/archive tasks, and move them by drag/drop or keyboard controls. Task and column changes detect stale versions. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces and projects cannot currently be restored in the UI.
 

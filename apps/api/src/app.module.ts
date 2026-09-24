@@ -11,6 +11,7 @@ import { ActivityModule } from './activity/activity.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SearchModule } from './search/search.module';
 import { RateLimitModule } from './rate-limit/rate-limit.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
     NotificationsModule,
     SearchModule,
     RateLimitModule,
+    AttachmentsModule,
   ],
 })
 export class AppModule {}

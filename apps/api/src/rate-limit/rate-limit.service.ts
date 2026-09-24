@@ -27,7 +27,7 @@ export class RateLimitService implements OnModuleDestroy {
 
   async check(
     identity: AuthIdentity,
-    action: 'invite-create' | 'invite-accept',
+    action: 'invite-create' | 'invite-accept' | 'attachment-upload',
     limit: number,
     windowMs: number,
     scope = 'global',
@@ -41,7 +41,7 @@ export class RateLimitService implements OnModuleDestroy {
       this.logger.warn(
         `Rate limit check failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
-      throw new ServiceUnavailableException('Invitation service unavailable');
+      throw new ServiceUnavailableException('Rate limit unavailable');
     }
     if (count > limit) throw new HttpException('Rate limit exceeded', 429);
   }

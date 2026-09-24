@@ -18,6 +18,7 @@ import { ActivityType, TaskPriority } from '@prisma/client';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { ActivityService } from '../activity/activity.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
 import { RealtimePublisher } from '../realtime/realtime.publisher';
 import { TasksService } from './tasks.service';
@@ -120,6 +121,8 @@ export class TasksController {
     @Inject(TasksService) private readonly tasks: TasksService,
     @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
     @Inject(ActivityService) private readonly activity: ActivityService,
+    @Inject(AttachmentsService)
+    private readonly attachments: AttachmentsService,
   ) {}
 
   @Get(':taskId')
@@ -285,11 +288,13 @@ export class TasksController {
   ) {
     const auth = identity(request);
     const before = await this.tasks.get(auth, taskId);
+    const attachmentPaths = await this.attachments.pathsForTask(taskId);
     const result = await this.tasks.deletePermanent(
       auth,
       taskId,
       parse(archiveSchema, body).expectedVersion,
     );
+    await this.attachments.cleanupDeletedTask(attachmentPaths);
     await this.activity.recordTask(
       auth,
       before.boardId,

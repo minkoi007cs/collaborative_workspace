@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 14 — Security/performance/accessibility hardening (in progress; Phase 12 attachments and Phase 11 email delivery pending)
-Current Milestone: Invitation abuse limits and basic browser response protections
+Current Phase: Phase 12 private attachments implemented locally; Phase 14 hardening continues
+Current Milestone: Private task file upload, download, and deletion with server-side authorization
 Current Branch: main
-Current Focus: Continue Phase 14 hardening and Phase 12 private attachments
-Last Completed Feature: Verified GitHub Actions checks and process jobs green after the pnpm setup fix
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent
-Next Recommended Task: Configure private object storage for Phase 12 attachments and complete live Supabase QA
+Current Focus: Configure and validate Supabase Auth and private Storage, then continue production hardening
+Last Completed Feature: Phase 12 private task attachments with local integration tests and production builds
+Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent
+Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA
 
 ---
 
@@ -1378,3 +1378,90 @@ GitHub CI has a verified passing run for `af4647b`. This documentation-only upda
 ### Next Recommended Task
 
 Configure private object storage for Phase 12 attachments and supply live Supabase configuration for end-to-end QA.
+
+## [2026-09-24] Change ID: PROC-017
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(files): add private task attachments`
+
+### Summary
+
+Implemented Phase 12 task attachments with private signed storage URLs, task-scoped authorization, finalization checks, a task-page file panel, and permanent task cleanup.
+
+### Reason
+
+The app had no way to attach documents to shared tasks. Upload and download need the same workspace access checks as task data and must not expose server storage credentials.
+
+### Features Added
+
+- `Attachment` metadata with pending and ready states, upload and download signing, server-side storage metadata verification, deletion, and a 20-file task limit.
+- Task file panel supporting browser upload, member downloads, uploader/admin deletion, status messages, and direct upload to a private bucket.
+- Attachment API integration coverage for viewer/editor/owner/outsider access, pending visibility, finalization, download, and deletion.
+
+### Features Modified
+
+- Task permanent deletion now attempts to remove associated storage objects after deleting the task record.
+- API configuration now accepts a server-only storage credential and a private bucket name; empty local bucket configuration uses the documented default.
+- README and architecture documentation describe bucket setup and current verification limits.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- `apps/api/src/attachments`, Prisma schema and migration, task controller/module, API configuration and integration test; task page, file actions/panel, download route, web types/styles; environment example, lockfile, README, audit, and architecture notes.
+
+### Database Changes
+
+- Added and locally applied `20260924183310_private_attachments` for `attachments` and `AttachmentStatus`. The migration also aligns the existing notification actor foreign key with the current nullable Prisma relation. The attachment path is unique and task/status/date lookup is indexed.
+
+### API Changes
+
+- Added `GET /tasks/:taskId/attachments`, `POST /tasks/:taskId/attachments/upload-url`, `POST /tasks/:taskId/attachments/:attachmentId/finalize`, `GET /attachments/:attachmentId/download-url`, and `DELETE /attachments/:attachmentId` under `/api/v1`.
+
+### WebSocket Changes
+
+- None; file mutations appear after page refresh.
+
+### Security Impact
+
+- Service-role key remains API-only. The API rejects public or overly permissive buckets, restricts MIME and size, checks workspace lineage on each request, hides pending uploads, and signs downloads only for current members. Upload requests are rate-limited in Redis. Signed URLs are bearer capabilities and must not be logged or cached.
+
+### Tests Added or Updated
+
+- Extended task integration test with file RBAC, metadata finalization, pending invisibility, signed download, and deletion using a fake storage adapter. No real Supabase bucket is configured.
+
+### Tests Run
+
+- Biome format and lint: passed on 108 files.
+- API and web TypeScript checks: passed.
+- Governance tests: 2 passed; API unit tests: 3 passed; web unit test: 1 passed.
+- Full API integration suite: 6 passed with local PostgreSQL and Redis.
+- Prisma schema validation, API production build, and Next.js production build: passed.
+- Live Supabase Storage upload/download and authenticated browser UI: not run because project URL, publishable key, and service-role key are unavailable.
+
+### Known Problems
+
+- Pending metadata and objects left by abandoned or failed uploads need a reconciliation job. Object cleanup after permanent task deletion is best effort and can leave an orphan after a storage outage. Bucket CORS and browser upload need live verification. Invitation email delivery remains absent.
+
+### Technical Debt Introduced
+
+- Add background reconciliation for stale pending records and orphaned objects, and durable cleanup retries. Consider event hints for file changes once live bucket behavior is proven.
+
+### Architecture Decisions
+
+- PostgreSQL controls attachment visibility; a signed upload alone does not publish a file. Browser uploads file bytes directly to private storage, while API verifies the stored object and authorizes each metadata operation. The storage service rejects unsafe bucket settings before signing.
+
+### tech.nmd Updated?
+
+Yes; file model, API, storage architecture, and environment variables updated.
+
+### Current Project State After This Change
+
+Phase 12 is implemented and locally tested with a fake storage adapter. Real bucket and authenticated browser checks remain blocked by missing Supabase configuration. Commit, push, and remote CI verification are pending for this entry.
+
+### Next Recommended Task
+
+Configure a private bucket and Supabase Auth, then test the full signed upload/download journey in a browser and review remote CI.

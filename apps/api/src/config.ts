@@ -6,6 +6,14 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   WEB_ORIGIN: z.string().url(),
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional().or(z.literal('')),
+  STORAGE_BUCKET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_-]{2,62}$/)
+      .default('syncspace-attachments'),
+  ),
 });
 
 export type ApiConfig = z.infer<typeof envSchema>;

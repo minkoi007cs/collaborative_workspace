@@ -10,6 +10,7 @@ import type {
   Profile,
   Project,
   Task,
+  TaskAttachment,
   TaskComment,
   TaskLabel,
   TaskPage as TaskListResponse,
@@ -28,6 +29,7 @@ import {
 } from '../../task-actions';
 import { ConfirmButton } from '../../workspaces/[workspaceId]/confirm-button';
 import { TaskDiscussion } from './task-discussion';
+import { AttachmentPanel } from './attachment-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,14 +73,17 @@ export default async function TaskPage({
   let labels: TaskLabel[];
   let firstTasks: TaskListResponse;
   let commentPage: CommentPage;
+  let attachments: TaskAttachment[];
   try {
-    [members, profile, labels, firstTasks, commentPage] = await Promise.all([
-      apiRequest<Member[]>(`/workspaces/${project.workspaceId}/members`),
-      apiRequest<Profile>('/users/me'),
-      apiRequest<TaskLabel[]>(`/projects/${project.id}/labels`),
-      apiRequest<TaskListResponse>(`/boards/${board.id}/tasks`),
-      apiRequest<CommentPage>(`/tasks/${taskId}/comments`),
-    ]);
+    [members, profile, labels, firstTasks, commentPage, attachments] =
+      await Promise.all([
+        apiRequest<Member[]>(`/workspaces/${project.workspaceId}/members`),
+        apiRequest<Profile>('/users/me'),
+        apiRequest<TaskLabel[]>(`/projects/${project.id}/labels`),
+        apiRequest<TaskListResponse>(`/boards/${board.id}/tasks`),
+        apiRequest<CommentPage>(`/tasks/${taskId}/comments`),
+        apiRequest<TaskAttachment[]>(`/tasks/${taskId}/attachments`),
+      ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login');
     return (
@@ -467,6 +472,13 @@ export default async function TaskPage({
           pageCount={pageCount}
           notice={notices.comment}
           error={notices.commentError}
+        />
+        <AttachmentPanel
+          taskId={taskId}
+          attachments={attachments}
+          canEdit={canEdit}
+          canManage={canManage}
+          currentUserId={profile.id}
         />
         <ActivityFeed
           title="Task activity"

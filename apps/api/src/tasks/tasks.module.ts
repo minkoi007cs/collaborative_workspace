@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { UsersModule } from '../users/users.module';
 import {
@@ -10,7 +11,7 @@ import {
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [AuthModule, UsersModule, ProjectsModule],
+  imports: [AuthModule, UsersModule, ProjectsModule, AttachmentsModule],
   controllers: [
     BoardsTasksController,
     TasksController,
