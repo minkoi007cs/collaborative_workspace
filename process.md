@@ -3,10 +3,10 @@
 ## Current Status
 
 Current Phase: Phase 14 hardening and product audit following Phase 16 delivery
-Current Milestone: Realtime room authorization, public UX, and dependency security verified locally
+Current Milestone: Realtime room authorization, public UX, and dependency security verified locally and in GitHub CI
 Current Branch: main
 Current Focus: Configure and validate Supabase Auth and private Storage, then prepare deployment operations
-Last Completed Feature: Local audit fixes for realtime rooms, typing permission, invitation continuation, upload quota, landing UX, and transitive advisories
+Last Completed Feature: Audit fixes for realtime rooms, typing permission, invitation continuation, upload quota, landing UX, and transitive advisories passed GitHub CI
 Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay; archive restore absent
 Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA; address upload reconciliation; plan deployment operations
 
@@ -1794,3 +1794,81 @@ Core collaboration modules and this audit patch pass local automated checks and 
 ### Next Recommended Task
 
 Configure Supabase Auth/Storage, run a two-user end-to-end pass, add upload reconciliation, and prepare deployment operations.
+
+## [2026-09-24] Change ID: PROC-022
+
+Author: Codex
+Branch: main
+Planned Commit Message: `docs(process): record audit CI result`
+
+### Summary
+
+Recorded the successful GitHub Actions result for audit commit `4f52a6f`.
+
+### Reason
+
+PROC-021 was written before the hosted workflow completed.
+
+### Features Added
+
+- GitHub Actions run `36047957027` completed successfully for the audit commit.
+
+### Features Modified
+
+- Current status and technical specification now reflect remote verification.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- `process.md`, `tech.nmd`.
+
+### Database Changes
+
+None.
+
+### API Changes
+
+None.
+
+### WebSocket Changes
+
+None.
+
+### Security Impact
+
+The hosted workflow verified the code and dependency lockfile with its checks, integration, and build jobs.
+
+### Tests Added or Updated
+
+None.
+
+### Tests Run
+
+- GitHub Actions run `36047957027`: completed successfully for commit `4f52a6f`.
+
+### Known Problems
+
+Live Supabase Auth/Storage, invitation email delivery, upload reconciliation, deployment, and durable event replay remain open.
+
+### Technical Debt Introduced
+
+None.
+
+### Architecture Decisions
+
+Keep remote CI outcomes in the chronological project handoff log.
+
+### tech.nmd Updated?
+
+Yes; remote audit verification reflected in the current development phase.
+
+### Current Project State After This Change
+
+The audit commit is on `main` and passed local and hosted automated checks. End-to-end product readiness still requires external Supabase configuration and signed-in browser QA.
+
+### Next Recommended Task
+
+Configure Supabase Auth and private Storage, perform two-user browser QA, then address upload reconciliation and deployment operations.
