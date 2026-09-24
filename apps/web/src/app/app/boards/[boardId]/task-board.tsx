@@ -29,12 +29,14 @@ function useBoardTasks() {
 
 export function TaskBoardProvider({
   boardId,
+  workspaceId,
   columns,
   initialTasks,
   canEdit,
   children,
 }: {
   boardId: string;
+  workspaceId: string;
   columns: BoardColumn[];
   initialTasks: Task[];
   canEdit: boolean;
@@ -46,6 +48,10 @@ export function TaskBoardProvider({
   const [liveStatus, setLiveStatus] = useState<
     'connecting' | 'connected' | 'unavailable'
   >('connecting');
+  const [online, setOnline] = useState<
+    Array<{ id: string; displayName: string }>
+  >([]);
+  const [presenceAvailable, setPresenceAvailable] = useState(true);
   const pendingRef = useRef(false);
   const router = useRouter();
 
@@ -86,28 +92,67 @@ export function TaskBoardProvider({
       if (!pendingRef.current) router.refresh();
     };
     socket.on('connect', () => {
-      socket
-        .timeout(5000)
-        .emit(
-          'board.join',
-          { boardId },
-          (timeout: Error | null, result?: { ok: boolean }) => {
-            if (timeout || !result?.ok) {
-              setLiveStatus('unavailable');
-              socket.disconnect();
-              return;
-            }
-            setLiveStatus('connected');
-            refresh();
+      socket.timeout(5000).emit(
+        'board.join',
+        { boardId },
+        (
+          timeout: Error | null,
+          result?: {
+            ok: boolean;
+            presence?: Array<{ id: string; displayName: string }>;
+            presenceAvailable?: boolean;
           },
-        );
+        ) => {
+          if (timeout || !result?.ok) {
+            setLiveStatus('unavailable');
+            socket.disconnect();
+            router.refresh();
+            return;
+          }
+          setLiveStatus('connected');
+          setOnline(result.presence ?? []);
+          setPresenceAvailable(result.presenceAvailable !== false);
+          refresh();
+        },
+      );
     });
     socket.on('disconnect', (reason) => {
       if (reason === 'io client disconnect') return;
       setLiveStatus('connecting');
+      setOnline([]);
       if (reason === 'io server disconnect') socket.connect();
     });
     socket.on('connect_error', () => setLiveStatus('unavailable'));
+    socket.on(
+      'presence.online',
+      (event: {
+        workspaceId: string;
+        entityId: string;
+        payload?: { displayName?: string };
+      }) => {
+        if (event.workspaceId !== workspaceId) return;
+        setOnline((current) =>
+          current.some((entry) => entry.id === event.entityId)
+            ? current
+            : [
+                ...current,
+                {
+                  id: event.entityId,
+                  displayName: event.payload?.displayName ?? 'Member',
+                },
+              ],
+        );
+      },
+    );
+    socket.on(
+      'presence.offline',
+      (event: { workspaceId: string; entityId: string }) => {
+        if (event.workspaceId === workspaceId)
+          setOnline((current) =>
+            current.filter((entry) => entry.id !== event.entityId),
+          );
+      },
+    );
     for (const name of [
       'task.created',
       'task.updated',
@@ -117,11 +162,32 @@ export function TaskBoardProvider({
     ]) {
       socket.on(name, refresh);
     }
+    const heartbeat = setInterval(() => {
+      if (socket.connected)
+        socket.timeout(5000).emit(
+          'presence.heartbeat',
+          (
+            timeout: Error | null,
+            result?: {
+              ok: boolean;
+              presence?: Array<{ id: string; displayName: string }>;
+            },
+          ) => {
+            if (timeout || !result?.ok) {
+              setPresenceAvailable(false);
+              return;
+            }
+            setPresenceAvailable(true);
+            if (result.presence) setOnline(result.presence);
+          },
+        );
+    }, 30_000);
     socket.connect();
     return () => {
+      clearInterval(heartbeat);
       socket.disconnect();
     };
-  }, [boardId, router]);
+  }, [boardId, workspaceId, router]);
 
   async function move(
     taskId: string,
@@ -213,6 +279,13 @@ export function TaskBoardProvider({
             ? 'Connecting live updates…'
             : 'Live updates unavailable. Refresh to see new changes.'}
       </p>
+      {liveStatus === 'connected' && (
+        <p className="board-hint" aria-live="polite">
+          {presenceAvailable
+            ? `Online now: ${online.length ? online.map((member) => member.displayName).join(', ') : 'No members'}`
+            : 'Online status unavailable'}
+        </p>
+      )}
       {children}
     </Context.Provider>
   );

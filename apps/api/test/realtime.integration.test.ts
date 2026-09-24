@@ -23,7 +23,7 @@ function waitFor<T>(socket: Socket, event: string): Promise<T> {
   });
 }
 
-test('realtime authenticates, isolates rooms, publishes committed tasks and revokes membership', async () => {
+test('realtime authenticates, isolates rooms, tracks multi-tab presence and revokes membership', async () => {
   const { publicKey, privateKey } = await generateKeyPair('ES256');
   const jwk = await exportJWK(publicKey);
   const keyServer = createServer((_request, response) => {
@@ -161,12 +161,14 @@ test('realtime authenticates, isolates rooms, publishes committed tasks and revo
     const watcherConnected = waitFor<void>(watcher, 'connect');
     watcher.connect();
     await watcherConnected;
-    assert.deepEqual(
-      await watcher
-        .timeout(3000)
-        .emitWithAck('board.join', { boardId: board.id }),
-      { ok: true },
-    );
+    const viewerJoin = (await watcher
+      .timeout(3000)
+      .emitWithAck('board.join', { boardId: board.id })) as {
+      ok: boolean;
+      presence: Array<{ id: string }>;
+    };
+    assert.equal(viewerJoin.ok, true);
+    assert.equal(viewerJoin.presence.length, 1);
     assert.deepEqual(
       await watcher
         .timeout(3000)
@@ -178,12 +180,14 @@ test('realtime authenticates, isolates rooms, publishes committed tasks and revo
     const otherConnected = waitFor<void>(otherWatcher, 'connect');
     otherWatcher.connect();
     await otherConnected;
-    assert.deepEqual(
-      await otherWatcher
-        .timeout(3000)
-        .emitWithAck('board.join', { boardId: secondBoard.id }),
-      { ok: true },
-    );
+    const ownerJoin = (await otherWatcher
+      .timeout(3000)
+      .emitWithAck('board.join', { boardId: secondBoard.id })) as {
+      ok: boolean;
+      presence: Array<{ id: string }>;
+    };
+    assert.equal(ownerJoin.ok, true);
+    assert.equal(ownerJoin.presence.length, 2);
     let leaked = false;
     otherWatcher.on('task.created', () => {
       leaked = true;
@@ -234,6 +238,34 @@ test('realtime authenticates, isolates rooms, publishes committed tasks and revo
       2,
     );
 
+    const secondViewer = socket(viewer);
+    const secondConnected = waitFor<void>(secondViewer, 'connect');
+    secondViewer.connect();
+    await secondConnected;
+    const secondJoin = (await secondViewer
+      .timeout(3000)
+      .emitWithAck('board.join', { boardId: board.id })) as {
+      ok: boolean;
+      presence: Array<{ id: string }>;
+    };
+    assert.equal(secondJoin.ok, true);
+    assert.equal(secondJoin.presence.length, 2);
+    const heartbeat = (await secondViewer
+      .timeout(3000)
+      .emitWithAck('presence.heartbeat')) as {
+      ok: boolean;
+      presence: Array<{ id: string }>;
+    };
+    assert.equal(heartbeat.ok, true);
+    assert.equal(heartbeat.presence.length, 2);
+    let prematureOffline = false;
+    otherWatcher.on('presence.offline', () => {
+      prematureOffline = true;
+    });
+    watcher.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(prematureOffline, false);
+
     const members = (await (
       await send(`/workspaces/${workspaceId}/members`, owner)
     ).json()) as Array<{ id: string; user: { email: string } }>;
@@ -241,7 +273,11 @@ test('realtime authenticates, isolates rooms, publishes committed tasks and revo
       (member) => member.user.email === 'realtime-1@example.test',
     );
     assert.ok(viewerMember);
-    const disconnected = waitFor<string>(watcher, 'disconnect');
+    const disconnected = waitFor<string>(secondViewer, 'disconnect');
+    const offline = waitFor<{ entityId: string }>(
+      otherWatcher,
+      'presence.offline',
+    );
     assert.equal(
       (
         await send(
@@ -253,7 +289,14 @@ test('realtime authenticates, isolates rooms, publishes committed tasks and revo
       200,
     );
     await disconnected;
-    assert.equal(watcher.connected, false);
+    assert.equal(secondViewer.connected, false);
+    assert.ok((await offline).entityId);
+    const archivedSocket = waitFor<string>(otherWatcher, 'disconnect');
+    assert.equal(
+      (await send(`/projects/${project.id}`, owner, 'DELETE')).status,
+      200,
+    );
+    await archivedSocket;
   } finally {
     sockets.forEach((client) => {
       client.disconnect();

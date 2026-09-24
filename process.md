@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 6 — Authenticated real-time board events (locally implemented and tested)
-Current Milestone: Verified Socket.IO connections, authorized board rooms, and client reconciliation
+Current Phase: Phase 7 — Redis workspace presence (locally implemented and tested)
+Current Milestone: Online workspace members with multi-tab leases, heartbeat, and disconnect handling
 Current Branch: main
-Current Focus: Phase 7 multi-tab Redis presence
-Last Completed Feature: Task and board event publication after REST commits, secure room joins, and board refresh on socket events
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no presence/comments/activity; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Implement Phase 7 Redis-backed workspace presence and multi-tab disconnect semantics
+Current Focus: Phase 8 optimistic UI and concurrency hardening
+Last Completed Feature: Redis workspace presence with per-socket leases, authorized heartbeat, multi-tab handling, and online board UI
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no comments/activity; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Harden optimistic task UX and conflict reconciliation, then implement Phase 9 comments
 
 ---
 
@@ -535,3 +535,88 @@ Phases 0–6 are locally implemented and tested. Main has been pushed through Ph
 ### Next Recommended Task
 
 Implement Phase 7 Redis-backed workspace presence with multi-tab semantics, authorization, expiry, and two-client tests.
+
+## [2026-09-24] Change ID: PROC-007
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(presence): track workspace users across tabs`
+
+### Summary
+
+Implemented Phase 7 Redis-backed workspace presence. Board pages show online members, update on online/offline events, and refresh leases and snapshots every 30 seconds.
+
+### Reason
+
+Task events alone do not tell collaborators who is available. Presence must account for multiple tabs and devices, network loss, and membership revocation without storing online status as permanent database state.
+
+### Features Added
+
+- Redis sorted-set leases per socket with 90-second expiry and atomic Lua join/leave operations. Workspace snapshots prune expired users and filter current memberships.
+- `presence.online`, `presence.offline`, and `presence.heartbeat` with board authorization before heartbeat renewal. One tab disconnecting does not mark a user offline while another lease remains.
+- Board online-member list and a visible unavailable state if Redis presence fails. Heartbeat acknowledgements refresh the list after missed events.
+- Integration coverage for two tabs of the same user, one-user snapshot deduplication, heartbeat, no premature offline event, and offline after the last tab is disconnected by member removal.
+
+### Features Modified
+
+- `board.join` returns a presence snapshot, and board leave/disconnect clears the socket lease.
+- Socket gateway reconnect and room switching retain correct workspace presence scope; project archive now disconnects affected board sockets.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- `apps/api/src/realtime`, realtime integration test, `apps/web` board page/provider, README, `tech.nmd`, audit, and this log.
+
+### Database Changes
+
+None. Presence is stored only in Redis with expiring leases.
+
+### API Changes
+
+No REST route changes.
+
+### WebSocket Changes
+
+Added `presence.heartbeat` acknowledgement with an online-member snapshot, plus `presence.online/offline` events scoped to the workspace room. `board.join` acknowledgement includes `presence` and `presenceAvailable`.
+
+### Security Impact
+
+Only authenticated, workspace-authorized board sockets can register presence. Heartbeats recheck board membership. Snapshot results are filtered against current memberships. Member removal and project/workspace archive disconnect sockets and release their leases.
+
+### Tests Added or Updated
+
+- Extended realtime integration test with two viewer sockets, heartbeat, snapshot deduplication, last-socket offline transition, and project-archive socket eviction.
+
+### Tests Run
+
+- Biome format/lint and API/web TypeScript: passed.
+- API integration suite, serial: 6/6 passed.
+- API TypeScript production build and Next.js production build: passed.
+- Live browser multi-user check: not run because Supabase project credentials are absent.
+
+### Known Problems
+
+Socket event publication still has no durable replay or cross-instance adapter. Presence leases expire after crashes, and the client heartbeat snapshot repairs the display; an immediate offline event is not guaranteed after a process crash. Authenticated UI visuals and Google OAuth remain unverified without a live Supabase project. Comments, activity, notifications, files, and search remain.
+
+### Technical Debt Introduced
+
+Presence snapshots query current memberships on each board join and heartbeat. At high connection counts, cache or batch this read. Redis Lua scripts assume a shared Redis deployment and use a workspace hash tag to keep their keys compatible with clustered key slots, but multi-instance Socket.IO event fanout is deferred to Phase 16.
+
+### Architecture Decisions
+
+Presence is a per-socket Redis lease with a workspace user index. Atomic scripts decide the first online and last offline transitions, while periodic authorized snapshots repair missed events. Presence errors degrade the indicator without rejecting an otherwise authorized board connection.
+
+### tech.nmd Updated?
+
+Yes; presence state, event catalog, Redis behavior, status, and ADR-003 updated.
+
+### Current Project State After This Change
+
+Phases 0–7 are locally implemented and tested; Phase 6 is on GitHub main. Phase 7 is ready to commit and push. The product still lacks live provider configuration and several MVP features.
+
+### Next Recommended Task
+
+Complete Phase 8 optimistic UI and concurrency hardening, then Phase 9 comments and typing indicators.

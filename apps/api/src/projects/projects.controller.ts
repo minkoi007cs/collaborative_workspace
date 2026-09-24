@@ -83,6 +83,7 @@ export class WorkspaceProjectsController {
 export class ProjectsController {
   constructor(
     @Inject(ProjectsService) private readonly projects: ProjectsService,
+    @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
   ) {}
 
   @Get(':projectId')
@@ -107,11 +108,13 @@ export class ProjectsController {
   }
 
   @Delete(':projectId')
-  archive(
+  async archive(
     @Req() request: AuthenticatedRequest,
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
-    return this.projects.archive(identity(request), projectId);
+    const result = await this.projects.archive(identity(request), projectId);
+    await this.realtime.evictProject(projectId);
+    return result;
   }
 
   @Get(':projectId/boards')

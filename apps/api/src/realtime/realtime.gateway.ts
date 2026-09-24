@@ -1,4 +1,4 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -15,11 +15,20 @@ import type { AuthIdentity } from '../auth/auth.types';
 import { loadConfig } from '../config';
 import { ProjectsService } from '../projects/projects.service';
 import { UsersService } from '../users/users.service';
+import { PresenceService } from './presence.service';
 import { RealtimePublisher } from './realtime.publisher';
 
 const boardSchema = z.object({ boardId: z.string().uuid() }).strict();
 type AuthorizedSocket = Socket & {
-  data: { identity: AuthIdentity; userId: string };
+  data: {
+    identity: AuthIdentity;
+    userId: string;
+    displayName: string;
+    workspaceId?: string;
+    boardId?: string;
+    lastHeartbeat?: number;
+    presenceRegistered?: boolean;
+  };
 };
 
 @WebSocketGateway({
@@ -30,6 +39,7 @@ type AuthorizedSocket = Socket & {
 export class RealtimeGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
+  private readonly logger = new Logger(RealtimeGateway.name);
   private readonly expiryTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -40,6 +50,7 @@ export class RealtimeGateway
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(ProjectsService) private readonly projects: ProjectsService,
     @Inject(RealtimePublisher) private readonly publisher: RealtimePublisher,
+    @Inject(PresenceService) private readonly presence: PresenceService,
   ) {}
 
   afterInit(namespace: Namespace) {
@@ -56,6 +67,7 @@ export class RealtimeGateway
         const user = await this.users.getOrCreate(identity);
         socket.data.identity = identity;
         socket.data.userId = user.id;
+        socket.data.displayName = user.displayName;
         next();
       } catch {
         next(new Error('Unauthorized'));
@@ -73,10 +85,39 @@ export class RealtimeGateway
     this.expiryTimers.set(client.id, timer);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: AuthorizedSocket) {
     const timer = this.expiryTimers.get(client.id);
     if (timer) clearTimeout(timer);
     this.expiryTimers.delete(client.id);
+    await this.dropPresence(client);
+  }
+
+  private async dropPresence(client: AuthorizedSocket) {
+    const workspaceId = client.data.workspaceId;
+    if (!workspaceId) return;
+    const registered = client.data.presenceRegistered;
+    client.data.workspaceId = undefined;
+    client.data.boardId = undefined;
+    client.data.presenceRegistered = false;
+    if (!registered) return;
+    try {
+      const offline = await this.presence.leave(
+        workspaceId,
+        client.data.userId,
+        client.id,
+      );
+      if (offline)
+        this.publisher.publishPresence(
+          'presence.offline',
+          workspaceId,
+          client.data.userId,
+          client.data.displayName,
+        );
+    } catch (error) {
+      this.logger.warn(
+        `Presence leave failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
   }
 
   @SubscribeMessage('board.join')
@@ -91,20 +132,49 @@ export class RealtimeGateway
         client.data.identity,
         input.data.boardId,
       );
+      const workspaceId = board.project.workspaceId;
+      if (client.data.workspaceId && client.data.workspaceId !== workspaceId)
+        await this.dropPresence(client);
       for (const room of client.rooms) {
         if (room.startsWith('board:') || room.startsWith('workspace:'))
           await client.leave(room);
       }
       await client.join(`board:${board.id}`);
-      await client.join(`workspace:${board.project.workspaceId}`);
-      return { ok: true };
+      await client.join(`workspace:${workspaceId}`);
+      client.data.workspaceId = workspaceId;
+      client.data.boardId = board.id;
+      try {
+        const online = await this.presence.join(
+          workspaceId,
+          client.data.userId,
+          client.id,
+        );
+        client.data.presenceRegistered = true;
+        if (online)
+          this.publisher.publishPresence(
+            'presence.online',
+            workspaceId,
+            client.data.userId,
+            client.data.displayName,
+          );
+        return {
+          ok: true,
+          presence: await this.presence.snapshot(workspaceId),
+          presenceAvailable: true,
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Presence join failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+        return { ok: true, presence: [], presenceAvailable: false };
+      }
     } catch {
       return { ok: false, error: 'not_found' };
     }
   }
 
   @SubscribeMessage('board.leave')
-  leave(
+  async leave(
     @ConnectedSocket() client: AuthorizedSocket,
     @MessageBody() payload: unknown,
   ) {
@@ -116,6 +186,44 @@ export class RealtimeGateway
       if (room.startsWith('board:') || room.startsWith('workspace:'))
         client.leave(room);
     }
+    await this.dropPresence(client);
     return { ok: true };
+  }
+
+  @SubscribeMessage('presence.heartbeat')
+  async heartbeat(@ConnectedSocket() client: AuthorizedSocket) {
+    const boardId = client.data.boardId;
+    const workspaceId = client.data.workspaceId;
+    if (!boardId || !workspaceId) return { ok: false, error: 'not_joined' };
+    if (Date.now() - (client.data.lastHeartbeat ?? 0) < 10_000)
+      return { ok: true };
+    try {
+      await this.projects.requireBoard(client.data.identity, boardId);
+    } catch {
+      client.disconnect(true);
+      return { ok: false, error: 'unauthorized' };
+    }
+    try {
+      const online = await this.presence.heartbeat(
+        workspaceId,
+        client.data.userId,
+        client.id,
+      );
+      client.data.presenceRegistered = true;
+      client.data.lastHeartbeat = Date.now();
+      if (online)
+        this.publisher.publishPresence(
+          'presence.online',
+          workspaceId,
+          client.data.userId,
+          client.data.displayName,
+        );
+      return { ok: true, presence: await this.presence.snapshot(workspaceId) };
+    } catch (error) {
+      this.logger.warn(
+        `Presence heartbeat failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      return { ok: false, error: 'presence_unavailable' };
+    }
   }
 }

@@ -106,7 +106,40 @@ export class RealtimePublisher {
     this.namespace?.in(`user:${userId}`).disconnectSockets(true);
   }
 
+  publishPresence(
+    event: 'presence.online' | 'presence.offline',
+    workspaceId: string,
+    userId: string,
+    displayName: string,
+  ) {
+    this.namespace?.to(`workspace:${workspaceId}`).emit(event, {
+      event,
+      eventId: randomUUID(),
+      workspaceId,
+      entityId: userId,
+      actorId: userId,
+      timestamp: new Date().toISOString(),
+      payload: { displayName },
+    });
+  }
+
   evictWorkspace(workspaceId: string) {
     this.namespace?.in(`workspace:${workspaceId}`).disconnectSockets(true);
+  }
+
+  async evictProject(projectId: string) {
+    if (!this.namespace) return;
+    try {
+      const boards = await this.prisma.board.findMany({
+        where: { projectId },
+        select: { id: true },
+      });
+      for (const board of boards)
+        this.namespace.in(`board:${board.id}`).disconnectSockets(true);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to evict archived project sockets: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
   }
 }

@@ -143,6 +143,7 @@ export default async function BoardPage({
           )}
         <TaskBoardProvider
           boardId={boardId}
+          workspaceId={project.workspaceId}
           columns={board.columns}
           initialTasks={tasks}
           canEdit={canEdit}
