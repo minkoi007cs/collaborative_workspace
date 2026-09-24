@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 11 — Notifications (inbox, events, and due reminders locally implemented; invitation email pending)
-Current Milestone: Member-scoped notification inbox, read state, action alerts, and idempotent due reminders
+Current Phase: Phase 13 — Scoped task search (locally implemented and tested; Phase 12 attachments and Phase 11 email delivery pending)
+Current Milestone: Indexed task search with workspace authorization and useful filters
 Current Branch: main
-Current Focus: Invitation email delivery and Phase 12 attachments
-Last Completed Feature: Idempotent 24-hour due reminders for current task assignees
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; invitation email delivery absent; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Configure invitation email provider or proceed with Phase 12 attachments
+Current Focus: Phase 12 private attachments and Phase 14 hardening
+Last Completed Feature: Workspace-scoped task search with PostgreSQL full-text index, filters, and pagination
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Configure private object storage for Phase 12 attachments or continue Phase 14 security/performance/accessibility hardening
 
 ---
 
@@ -1051,3 +1051,86 @@ Phase 11 inbox, core action alerts, and due reminders are locally implemented an
 ### Next Recommended Task
 
 Configure an invitation email provider or proceed to Phase 12 private attachments.
+
+## [2026-09-24] Change ID: PROC-013
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(search): add scoped task full-text search`
+
+### Summary
+
+Implemented Phase 13 workspace-scoped task search over titles and descriptions, with project, assignee, and priority filters and a dedicated search page.
+
+### Reason
+
+Members need to find work beyond the currently open board. The database index must not allow cross-workspace or archived content to leak through search.
+
+### Features Added
+
+- PostgreSQL GIN expression index for task title/description full-text documents.
+- Member-authorized search API with parameterized query, relevance order, filters, and 20-result pages.
+- Workspace search entry and full search page with filters, task links, empty/error states, and pagination.
+
+### Features Modified
+
+- README, architecture spec, audit, and current status now describe task search and its limits.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Search index migration, new API search module, AppModule, task integration test, workspace page, search page, web API types/styles, README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+Applied `20260924050100_task_search_index` locally. It creates a GIN index on a `simple` full-text document built from task title and description; no Prisma model change is required.
+
+### API Changes
+
+Added `GET /api/v1/workspaces/:workspaceId/search?q=...` with optional `projectId`, `assigneeId`, `priority`, and page 1–10. Returns up to 20 task matches and `hasMore`. Search query is 2–100 characters.
+
+### WebSocket Changes
+
+- None. Search reads authoritative PostgreSQL state on navigation.
+
+### Security Impact
+
+Search first verifies current membership in an active workspace. Parameterized SQL joins task ancestry and excludes archived tasks/projects/workspaces. Input validation limits query size and filter values. Task descriptions render as escaped text in React.
+
+### Tests Added or Updated
+
+- Task integration checks outsider 404, short query 400, member result, project/priority filters, and exclusion after task archive.
+
+### Tests Run
+
+- Search index migration deployed locally.
+- Full serial API integration suite: 6/6 passed.
+- Biome format/lint, API/web TypeScript, API production build, and Next.js production build: passed.
+- Authenticated browser search UI not tested because Supabase project credentials are absent.
+
+### Known Problems
+
+Search covers task title/description only and stops at page 10. It does not search comments, files, project descriptions, or archived tasks. Live provider UI remains unverified. Phase 12 private attachments and invitation email delivery still need storage/email providers.
+
+### Technical Debt Introduced
+
+The expression index is maintained in SQL migration rather than Prisma schema because Prisma cannot represent this full-text expression. Search uses offset pages and may shift under concurrent edits; use keyset pagination if results grow substantially. Measure query plans with real data before adopting dedicated search infrastructure.
+
+### Architecture Decisions
+
+PostgreSQL full-text search with `simple` tokenization is sufficient for this scope. The API binds all user values and applies workspace ancestry within the query after a membership check. Search result URLs point only to tasks still active when read.
+
+### tech.nmd Updated?
+
+Yes; data/API/search architecture, status, and limits updated.
+
+### Current Project State After This Change
+
+Phases 0–10, Phase 11 inbox/core alerts/reminders, and Phase 13 task search are locally implemented and tested. Phase 12 attachments, Phase 11 invitation delivery, and production validation remain.
+
+### Next Recommended Task
+
+Configure private object storage for Phase 12 or continue Phase 14 security/performance/accessibility hardening.

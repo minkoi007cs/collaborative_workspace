@@ -40,6 +40,8 @@ Task pages support comments from editors and above; viewers can read. Authors ca
 
 Task and workspace pages show a paginated activity feed with the actor, action, time, and relevant task details. Only current workspace members can read it. Activity writes currently run after the primary mutation, so a transient failure may leave an activity gap; the API logs that failure and still returns the result of the completed mutation.
 
+Workspace pages link to task search. Search matches task titles and descriptions through a PostgreSQL full-text index, can filter by project, assignee, and priority, and returns only active tasks in the signed-in member's workspace. Results are paginated at 20 per page.
+
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
 If the web server uses another port, set `WEB_ORIGIN` to that exact browser origin so REST and Socket.IO connections are accepted.
 

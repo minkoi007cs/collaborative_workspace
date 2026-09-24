@@ -774,3 +774,30 @@ button:disabled {
 .notification-item.unread {
   border-color: var(--accent, #5975d6);
 }
+.search-form {
+  display: grid;
+  gap: 1rem;
+}
+.search-form > input {
+  width: 100%;
+}
+.search-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.search-filters > div {
+  display: grid;
+  gap: 0.35rem;
+}
+.search-pagination {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+@media (max-width: 700px) {
+  .search-filters {
+    grid-template-columns: 1fr;
+  }
+}

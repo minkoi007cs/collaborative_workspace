@@ -139,6 +139,29 @@ export default async function WorkspacePage({
             That change could not be saved. Please refresh and try again.
           </p>
         )}
+        <section className="banner" aria-labelledby="search-title">
+          <h2 id="search-title">Find a task</h2>
+          <form
+            action={`/app/workspaces/${workspaceId}/search`}
+            method="get"
+            className="profile-form-row"
+          >
+            <label className="sr-only" htmlFor="workspace-search">
+              Search tasks in {workspace.name}
+            </label>
+            <input
+              id="workspace-search"
+              name="q"
+              placeholder="Search task titles and descriptions"
+              minLength={2}
+              maxLength={100}
+              required
+            />
+            <button className="secondary-button" type="submit">
+              Search
+            </button>
+          </form>
+        </section>
         <section className="banner" aria-labelledby="projects-title">
           <h2 id="projects-title">Projects</h2>
           {projects.length === 0 ? (

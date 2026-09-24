@@ -141,6 +141,26 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     assert.equal((await send(`/tasks/${task.id}`, viewer)).status, 200);
     assert.equal((await send(`/tasks/${task.id}`, outsider)).status, 404);
     assert.equal(
+      (await send(`/workspaces/${workspaceId}/search?q=release`, outsider))
+        .status,
+      404,
+    );
+    assert.equal(
+      (await send(`/workspaces/${workspaceId}/search?q=r`, viewer)).status,
+      400,
+    );
+    const searchResult = await send(
+      `/workspaces/${workspaceId}/search?q=release`,
+      viewer,
+    );
+    assert.equal(searchResult.status, 200);
+    assert.deepEqual(
+      (
+        (await searchResult.json()) as { items: Array<{ taskId: string }> }
+      ).items.map((item) => item.taskId),
+      [task.id],
+    );
+    assert.equal(
       (await send(`/tasks/${task.id}/comments`, outsider)).status,
       404,
     );
@@ -345,6 +365,25 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     });
     assert.equal(updated.status, 200);
     assert.equal(((await updated.json()) as { version: number }).version, 2);
+    const filteredSearch = await send(
+      `/workspaces/${workspaceId}/search?q=rollout&priority=HIGH&projectId=${project.id}`,
+      viewer,
+    );
+    assert.equal(filteredSearch.status, 200);
+    assert.equal(
+      ((await filteredSearch.json()) as { items: Array<{ taskId: string }> })
+        .items[0].taskId,
+      task.id,
+    );
+    const wrongPriority = await send(
+      `/workspaces/${workspaceId}/search?q=rollout&priority=LOW`,
+      viewer,
+    );
+    assert.equal(wrongPriority.status, 200);
+    assert.equal(
+      ((await wrongPriority.json()) as { items: unknown[] }).items.length,
+      0,
+    );
     assert.equal(
       (
         await send(`/tasks/${task.id}`, editor, 'PATCH', {
@@ -585,6 +624,14 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     });
     assert.equal(archived.status, 200);
     assert.equal((await send(`/tasks/${task.id}`, editor)).status, 404);
+    assert.equal(
+      (
+        (await (
+          await send(`/workspaces/${workspaceId}/search?q=rollout`, viewer)
+        ).json()) as { items: unknown[] }
+      ).items.length,
+      0,
+    );
     const list = await send(`/boards/${board.id}/tasks`, editor);
     assert.equal(list.status, 200);
     assert.equal(((await list.json()) as { items: unknown[] }).items.length, 2);

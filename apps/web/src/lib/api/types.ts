@@ -127,6 +127,23 @@ export type NotificationPage = {
   unreadCount: number;
 };
 export type NotificationCount = { unreadCount: number };
+export type TaskSearchResult = {
+  taskId: string;
+  boardId: string;
+  projectId: string;
+  projectName: string;
+  boardName: string;
+  title: string;
+  description: string | null;
+  priority: Task['priority'];
+  dueAt: string | null;
+  rank: number;
+};
+export type TaskSearchPage = {
+  items: TaskSearchResult[];
+  hasMore: boolean;
+  page: number;
+};
 export type TaskLabel = {
   id: string;
   name: string;

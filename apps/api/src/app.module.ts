@@ -9,6 +9,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { CommentsModule } from './comments/comments.module';
 import { ActivityModule } from './activity/activity.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     CommentsModule,
     ActivityModule,
     NotificationsModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
