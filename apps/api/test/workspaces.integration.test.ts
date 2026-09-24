@@ -180,6 +180,14 @@ test('workspace roles, invitation acceptance, ownership, and archive are enforce
       ).status,
       200,
     );
+    const roleInbox = (await (await send('/notifications', guest)).json()) as {
+      items: Array<{ type: string; taskId: string | null }>;
+    };
+    assert.ok(
+      roleInbox.items.some(
+        (item) => item.type === 'ROLE_CHANGED' && item.taskId === null,
+      ),
+    );
     assert.equal(
       (
         await send(

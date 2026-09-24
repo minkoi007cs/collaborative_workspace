@@ -202,11 +202,12 @@ export class TasksController {
     @Body() body: unknown,
   ) {
     const auth = identity(request);
-    const task = await this.tasks.setAssignees(
+    const result = await this.tasks.setAssignees(
       auth,
       taskId,
       parse(assigneeSchema, body),
     );
+    const task = result.task;
     await this.activity.recordTask(
       auth,
       task.boardId,
@@ -215,6 +216,12 @@ export class TasksController {
       { title: task.title, assigneeCount: task.assignees.length },
     );
     await this.realtime.publishTaskForIdentity('task.updated', task, auth);
+    this.realtime.publishNotificationCreated(
+      result.recipientIds,
+      'ASSIGNMENT',
+      task.id,
+      task.id,
+    );
     return task;
   }
 

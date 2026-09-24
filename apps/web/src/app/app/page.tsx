@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ApiError, apiRequest } from '@/lib/api/server';
-import type { Profile, Workspace } from '@/lib/api/types';
+import type { NotificationCount, Profile, Workspace } from '@/lib/api/types';
 import { verifiedAccessToken } from '@/lib/supabase/access-token';
 import { updateProfile } from './actions';
 import { SignOutButton } from './sign-out-button';
@@ -22,12 +22,14 @@ export default async function AppPage({
 }) {
   if (!(await verifiedAccessToken())) redirect('/login');
   const params = await searchParams;
-  const [profileResult, workspacesResult] = await Promise.allSettled([
-    apiRequest<Profile>('/users/me'),
-    apiRequest<Workspace[]>('/workspaces'),
-  ]);
+  const [profileResult, workspacesResult, notificationResult] =
+    await Promise.allSettled([
+      apiRequest<Profile>('/users/me'),
+      apiRequest<Workspace[]>('/workspaces'),
+      apiRequest<NotificationCount>('/notifications/unread-count'),
+    ]);
   if (
-    [profileResult, workspacesResult].some(
+    [profileResult, workspacesResult, notificationResult].some(
       (result) =>
         result.status === 'rejected' &&
         result.reason instanceof ApiError &&
@@ -39,6 +41,10 @@ export default async function AppPage({
     profileResult.status === 'fulfilled' ? profileResult.value : null;
   const workspaces =
     workspacesResult.status === 'fulfilled' ? workspacesResult.value : null;
+  const notificationCount =
+    notificationResult.status === 'fulfilled'
+      ? notificationResult.value.unreadCount
+      : null;
 
   return (
     <div className="shell">
@@ -50,9 +56,10 @@ export default async function AppPage({
         <span className="sidebar-item" aria-current="page">
           Workspaces
         </span>
-        <p className="sidebar-note">
-          Projects and live boards are coming next.
-        </p>
+        <Link href="/app/notifications" className="sidebar-item">
+          Notifications
+          {notificationCount === null ? '' : ` (${notificationCount})`}
+        </Link>
       </aside>
       <main className="main">
         <div className="dashboard-top">

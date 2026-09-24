@@ -105,6 +105,24 @@ export type ActivityPage = {
   items: ActivityEvent[];
   nextCursor: string | null;
 };
+export type Notification = {
+  id: string;
+  workspaceId: string;
+  taskId: string | null;
+  commentId: string | null;
+  type: 'MENTION' | 'ASSIGNMENT' | 'COMMENT' | 'ROLE_CHANGED';
+  createdAt: string;
+  readAt: string | null;
+  actor: { id: string; displayName: string };
+  workspace: { name: string };
+  task: { title: string; archivedAt: string | null } | null;
+};
+export type NotificationPage = {
+  items: Notification[];
+  nextCursor: string | null;
+  unreadCount: number;
+};
+export type NotificationCount = { unreadCount: number };
 export type TaskLabel = {
   id: string;
   name: string;

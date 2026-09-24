@@ -369,7 +369,9 @@ export class TasksService {
   ) {
     if (new Set(input.userIds).size !== input.userIds.length)
       throw new BadRequestException('Duplicate assignee');
-    return this.replaceRelations(
+    const actorId = await this.userId(identity);
+    let recipientIds: string[] = [];
+    const task = await this.replaceRelations(
       identity,
       taskId,
       input.expectedVersion,
@@ -382,13 +384,33 @@ export class TasksService {
         });
         if (count !== input.userIds.length)
           throw new BadRequestException('Assignee must belong to workspace');
+        const previous = await tx.taskAssignee.findMany({
+          where: { taskId },
+          select: { userId: true },
+        });
+        const oldIds = new Set(previous.map((entry) => entry.userId));
+        const newlyAssigned = input.userIds.filter(
+          (id) => id !== actorId && !oldIds.has(id),
+        );
         await tx.taskAssignee.deleteMany({ where: { taskId } });
         if (input.userIds.length)
           await tx.taskAssignee.createMany({
             data: input.userIds.map((userId) => ({ taskId, userId })),
           });
+        if (newlyAssigned.length)
+          await tx.notification.createMany({
+            data: newlyAssigned.map((recipientId) => ({
+              workspaceId: board.project.workspaceId,
+              taskId,
+              recipientId,
+              actorId,
+              type: 'ASSIGNMENT',
+            })),
+          });
+        recipientIds = newlyAssigned;
       },
     );
+    return { task, recipientIds };
   }
 
   async setLabels(

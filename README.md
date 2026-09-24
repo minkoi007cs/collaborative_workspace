@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a workspace and task collaboration platform under development. The repository contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, Phase 5 task management, Phase 6 authenticated board updates, Phase 7 workspace presence, Phase 8 conflict handling, Phase 9 task comments, and Phase 10 activity history. A notification inbox and production operations remain on the roadmap.
+SyncSpace is a workspace and task collaboration platform under development. Phases 1–10 cover the foundation, authentication, workspaces, projects, tasks, live board updates, presence, conflict handling, comments, and activity history. Phase 11 now includes a notification inbox and read state; scheduled reminders, invitation delivery, and production operations remain on the roadmap.
 
 ## Architecture
 
@@ -36,7 +36,7 @@ Board pages join an authorized Socket.IO room and refresh after task or column e
 
 The board shows online workspace members. Redis leases track each socket separately, so another tab keeps a member online when one tab closes. The client sends a heartbeat every 30 seconds; leases expire after 90 seconds and each heartbeat refreshes the displayed list. Presence is temporary and is not written to PostgreSQL.
 
-Task pages support comments from editors and above; viewers can read. Authors can edit or delete their own comments, with version conflicts reported clearly. Type `@member@example.com` or use the mention picker to notify a current workspace member. Comments are rendered as text, and authorized task sockets receive comment and short-lived typing events. Mention notifications are stored now; a notification inbox is planned for Phase 11.
+Task pages support comments from editors and above; viewers can read. Authors can edit or delete their own comments, with version conflicts reported clearly. Type `@member@example.com` or use the mention picker to notify a current workspace member. Comments are rendered as text, and authorized task sockets receive comment and short-lived typing events. The inbox at `/app/notifications` shows mentions, comments on assigned or created tasks, new assignments, and role changes, with unread counts and read controls. Only current members can see notifications from their workspaces.
 
 Task and workspace pages show a paginated activity feed with the actor, action, time, and relevant task details. Only current workspace members can read it. Activity writes currently run after the primary mutation, so a transient failure may leave an activity gap; the API logs that failure and still returns the result of the completed mutation.
 

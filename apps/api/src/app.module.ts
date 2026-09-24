@@ -8,6 +8,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CommentsModule } from './comments/comments.module';
 import { ActivityModule } from './activity/activity.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ActivityModule } from './activity/activity.module';
     RealtimeModule,
     CommentsModule,
     ActivityModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

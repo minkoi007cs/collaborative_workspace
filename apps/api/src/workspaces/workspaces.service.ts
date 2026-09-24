@@ -183,15 +183,34 @@ export class WorkspacesService {
     if (!membership) throw new NotFoundException('Member not found');
     if (membership.role === WorkspaceRole.OWNER)
       throw new ForbiddenException('Cannot change owner role');
-    return this.prisma.workspaceMember.update({
-      where: { id: memberId },
-      data: { role },
-      select: {
-        id: true,
-        role: true,
-        user: { select: { id: true, email: true, displayName: true } },
-      },
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const member = await tx.workspaceMember.update({
+        where: { id: memberId },
+        data: { role },
+        select: {
+          id: true,
+          role: true,
+          user: { select: { id: true, email: true, displayName: true } },
+        },
+      });
+      if (membership.role !== role && member.user.id !== userId)
+        await tx.notification.create({
+          data: {
+            workspaceId,
+            recipientId: member.user.id,
+            actorId: userId,
+            type: 'ROLE_CHANGED',
+          },
+        });
+      return member;
     });
+    if (membership.role !== role && changed.user.id !== userId)
+      this.realtime.publishNotificationCreated(
+        [changed.user.id],
+        'ROLE_CHANGED',
+        workspaceId,
+      );
+    return changed;
   }
 
   async removeMember(

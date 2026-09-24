@@ -179,6 +179,45 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       }),
       1,
     );
+    const ownerInbox = await send('/notifications', owner);
+    assert.equal(ownerInbox.status, 200);
+    const inbox = (await ownerInbox.json()) as {
+      items: Array<{ id: string; taskId: string; readAt: string | null }>;
+      unreadCount: number;
+    };
+    assert.equal(inbox.unreadCount, 1);
+    assert.equal(inbox.items[0].taskId, task.id);
+    assert.equal(inbox.items[0].readAt, null);
+    assert.equal(
+      (
+        await send(
+          `/notifications/${inbox.items[0].id}/read`,
+          outsider,
+          'PATCH',
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (await send(`/notifications/${inbox.items[0].id}/read`, owner, 'PATCH'))
+        .status,
+      200,
+    );
+    assert.equal(
+      (await send(`/notifications/${inbox.items[0].id}/read`, owner, 'PATCH'))
+        .status,
+      200,
+    );
+    const afterRead = (await (
+      await send('/notifications/unread-count', owner)
+    ).json()) as {
+      unreadCount: number;
+    };
+    assert.equal(afterRead.unreadCount, 0);
+    assert.equal(
+      (await send('/notifications/read-all', owner, 'POST')).status,
+      201,
+    );
     assert.equal(
       (
         await send(`/comments/${comment.id}`, owner, 'PATCH', {
@@ -272,6 +311,21 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
     assert.ok(
       workspaceEvents.items.some(
         (entry) => entry.eventType === 'PROJECT_CREATED',
+      ),
+    );
+    const generalComment = await send(
+      `/tasks/${task.id}/comments`,
+      owner,
+      'POST',
+      { content: 'Status update' },
+    );
+    assert.equal(generalComment.status, 201);
+    const editorInboxAfterComment = (await (
+      await send('/notifications', editor)
+    ).json()) as { items: Array<{ type: string; taskId: string }> };
+    assert.ok(
+      editorInboxAfterComment.items.some(
+        (item) => item.type === 'COMMENT' && item.taskId === task.id,
       ),
     );
     assert.equal(
@@ -415,12 +469,16 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       id: string;
       user: { id: string; email: string };
     }>;
+    const ownerId = members.find(
+      (member) => member.user.email === 'task-owner@example.test',
+    )?.user.id;
+    assert.ok(ownerId);
     const editorId = members.find(
       (member) => member.user.email === 'task-editor@example.test',
     )?.user.id;
     assert.ok(editorId);
     const assigned = await send(`/tasks/${task.id}/assignees`, editor, 'PUT', {
-      userIds: [editorId],
+      userIds: [ownerId],
       expectedVersion: 3,
     });
     assert.equal(assigned.status, 200);
@@ -428,6 +486,14 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       ((await assigned.json()) as { assignees: unknown[]; version: number })
         .assignees.length,
       1,
+    );
+    const ownerInboxAfterAssignment = (await (
+      await send('/notifications', owner)
+    ).json()) as { items: Array<{ type: string; taskId: string }> };
+    assert.ok(
+      ownerInboxAfterAssignment.items.some(
+        (item) => item.type === 'ASSIGNMENT' && item.taskId === task.id,
+      ),
     );
     const labelResponse = await send(
       `/projects/${project.id}/labels`,

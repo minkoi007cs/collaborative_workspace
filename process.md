@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 10 — Activity history (locally implemented and tested)
-Current Milestone: Scoped task and workspace history with actor and action details
+Current Phase: Phase 11 — Notification inbox and core events (locally implemented and tested; reminders/delivery pending)
+Current Milestone: Member-scoped notification inbox, read state, and action-driven alerts
 Current Branch: main
-Current Focus: Phase 11 notification inbox and read state
-Last Completed Feature: Paginated activity feeds for task and workspace actions, with membership checks and actor metadata
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no notification inbox; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Implement Phase 11 notification inbox and read state
+Current Focus: Complete Phase 11 scheduled reminders and invitation delivery, then Phase 12 attachments
+Last Completed Feature: Paginated notification inbox, unread counts/read state, and mention/comment/assignment/role events
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; due-date reminders and invitation delivery absent; inbox requires refresh; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Add idempotent due-date reminder worker and invitation email delivery when provider is configured
 
 ---
 
@@ -878,3 +878,90 @@ Phases 0–10 are locally implemented and tested. Phase 10 is ready to commit an
 ### Next Recommended Task
 
 Implement Phase 11 notification inbox and read state.
+
+## [2026-09-24] Change ID: PROC-011
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(notifications): add inbox and action alerts`
+
+### Summary
+
+Added a member-scoped notification inbox, unread count, read controls, and durable notification events for comments, new assignments, and role changes alongside mentions. Scheduled due-date reminders and invitation email delivery remain open.
+
+### Reason
+
+Recipients need a place to find and clear collaboration alerts. A notification ID alone must never grant access to another user's data.
+
+### Features Added
+
+- Paginated 50-item inbox, unread count, idempotent single read, and mark-all-read APIs.
+- `/app/notifications` page with links to active tasks or workspaces, unread state, pagination, and error/empty states; dashboard navigation displays unread count.
+- Assignment notices only for newly assigned members, comment notices for task creator/assignees who were not mentioned, and role-change notices for the affected member.
+- Best-effort `notification.created` socket hints for the new action types.
+
+### Features Modified
+
+- Notification task/comment foreign keys are optional to support workspace-only role events.
+- Existing mention notifications appear in the inbox with read state.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and migration, notifications API module, task/comment/workspace services and controllers, realtime publisher, API integration tests, dashboard and notification page/actions/types/styles, README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+Applied `20260924044609_notification_inbox_types` locally. `NotificationType` now includes `ASSIGNMENT`, `COMMENT`, and `ROLE_CHANGED`; `task_id` and `comment_id` are nullable. Notification records for assignment, comment, and role actions are created in the same database transaction as the primary mutation.
+
+### API Changes
+
+Added `GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`, `PATCH /api/v1/notifications/:notificationId/read`, and `POST /api/v1/notifications/read-all`. The list has `items`, `nextCursor`, and `unreadCount`.
+
+### WebSocket Changes
+
+`notification.created` can now signal mention, assignment, comment, and role-change types to authorized user rooms after commit. The inbox currently refreshes on navigation rather than subscribing directly.
+
+### Security Impact
+
+List/count/read queries derive the recipient from the verified token and require current membership in a non-archived workspace. Outsiders receive 404 for a notification ID. Comment recipients are deduplicated against mentions and exclude the author. Former members no longer see their old workspace's alerts.
+
+### Tests Added or Updated
+
+- Task integration checks inbox visibility, outsider read denial, read idempotency, unread count, mark-all, and comment/assignment notices.
+- Workspace integration checks a role-change notice for the affected member.
+
+### Tests Run
+
+- Prisma migration deployed locally and client generated.
+- Biome format/lint and API/web TypeScript: passed.
+- Full serial API integration suite: 6/6 passed after fixing a test fixture variable.
+- API TypeScript production build and Next.js production build: passed.
+- Authenticated browser inbox not tested because Supabase project credentials are absent.
+
+### Known Problems
+
+Due-date reminders need a scheduled, idempotent worker; invitation delivery needs an email provider and recipient flow. Inbox changes do not appear until navigation or refresh. Hard deletion of a task cascades its task notifications. Live provider UI, attachments, search, and production deployment remain.
+
+### Technical Debt Introduced
+
+The web inbox loads at most 500 entries across ten pages. The notification count query relies on recipient and workspace indexes; measure query plans before scaling. Socket publication remains best effort and does not replay missed hints.
+
+### Architecture Decisions
+
+PostgreSQL owns durable notifications; socket messages are refresh hints. Mutation-linked notifications are inserted within the same transaction as task/comment/role changes. Inbox visibility is recomputed from current membership for every request rather than relying on membership at creation time.
+
+### tech.nmd Updated?
+
+Yes; models, API, socket catalog, notification architecture, status, and limits updated.
+
+### Current Project State After This Change
+
+Phases 0–10 and Phase 11 inbox/core event paths are locally implemented and tested. Phase 11 is not complete until due-date scheduling and invitation delivery are decided and implemented. GitHub CI and live two-user browser QA remain unverified.
+
+### Next Recommended Task
+
+Build an idempotent due-date reminder worker and configure invitation email delivery, then proceed to Phase 12 attachments.

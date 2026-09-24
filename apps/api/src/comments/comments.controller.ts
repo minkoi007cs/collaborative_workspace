@@ -88,6 +88,12 @@ export class TaskCommentsController {
       result.comment.id,
       taskId,
     );
+    this.realtime.publishNotificationCreated(
+      result.commentRecipientIds,
+      'COMMENT',
+      result.comment.id,
+      taskId,
+    );
     return result.comment;
   }
 }

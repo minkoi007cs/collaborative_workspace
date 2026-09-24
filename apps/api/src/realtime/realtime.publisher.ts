@@ -167,14 +167,23 @@ export class RealtimePublisher {
   }
 
   publishMentions(recipientIds: string[], commentId: string, taskId: string) {
+    this.publishNotificationCreated(recipientIds, 'MENTION', commentId, taskId);
+  }
+
+  publishNotificationCreated(
+    recipientIds: string[],
+    type: 'MENTION' | 'ASSIGNMENT' | 'COMMENT' | 'ROLE_CHANGED',
+    entityId: string,
+    taskId?: string,
+  ) {
     for (const recipientId of recipientIds)
       this.namespace?.to(`user:${recipientId}`).emit('notification.created', {
         event: 'notification.created',
         eventId: randomUUID(),
-        entityId: commentId,
+        entityId,
         taskId,
         timestamp: new Date().toISOString(),
-        payload: { type: 'MENTION' },
+        payload: { type },
       });
   }
 

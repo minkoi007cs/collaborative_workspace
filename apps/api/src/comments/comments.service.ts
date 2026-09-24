@@ -169,7 +169,46 @@ export class CommentsService {
                 type: 'MENTION',
               })),
             });
-          return { comment, boardId: board.id, recipientIds };
+          const task = await tx.task.findUniqueOrThrow({
+            where: { id: taskId },
+            select: {
+              createdBy: true,
+              assignees: { select: { userId: true } },
+            },
+          });
+          const candidateIds = [
+            ...new Set([
+              task.createdBy,
+              ...task.assignees.map((entry) => entry.userId),
+            ]),
+          ].filter((id) => id !== authorId && !recipientIds.includes(id));
+          const currentMembers = await tx.workspaceMember.findMany({
+            where: {
+              workspaceId: board.project.workspaceId,
+              userId: { in: candidateIds },
+            },
+            select: { userId: true },
+          });
+          const commentRecipientIds = currentMembers.map(
+            (member) => member.userId,
+          );
+          if (commentRecipientIds.length)
+            await tx.notification.createMany({
+              data: commentRecipientIds.map((recipientId) => ({
+                workspaceId: board.project.workspaceId,
+                taskId,
+                commentId: comment.id,
+                recipientId,
+                actorId: authorId,
+                type: 'COMMENT',
+              })),
+            });
+          return {
+            comment,
+            boardId: board.id,
+            recipientIds,
+            commentRecipientIds,
+          };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

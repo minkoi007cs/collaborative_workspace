@@ -256,21 +256,24 @@ model CommentMention {
 
 enum NotificationType {
   MENTION
+  ASSIGNMENT
+  COMMENT
+  ROLE_CHANGED
 }
 
 model Notification {
   id          String           @id @default(uuid()) @db.Uuid
   workspaceId String           @map("workspace_id") @db.Uuid
-  taskId      String           @map("task_id") @db.Uuid
-  commentId   String           @map("comment_id") @db.Uuid
+  taskId      String?          @map("task_id") @db.Uuid
+  commentId   String?          @map("comment_id") @db.Uuid
   recipientId String           @map("recipient_id") @db.Uuid
   actorId     String           @map("actor_id") @db.Uuid
   type        NotificationType
   createdAt   DateTime         @default(now()) @map("created_at")
   readAt      DateTime?        @map("read_at")
   workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  comment     Comment          @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  task        Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  comment     Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   actor       User             @relation("NotificationActor", fields: [actorId], references: [id])
 

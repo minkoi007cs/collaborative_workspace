@@ -756,3 +756,21 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+.notification-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.notification-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.notification-item p {
+  margin: 0 0 0.35rem;
+}
+.notification-item.unread {
+  border-color: var(--accent, #5975d6);
+}
