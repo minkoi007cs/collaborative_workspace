@@ -110,12 +110,16 @@ export type Notification = {
   workspaceId: string;
   taskId: string | null;
   commentId: string | null;
-  type: 'MENTION' | 'ASSIGNMENT' | 'COMMENT' | 'ROLE_CHANGED';
+  type: 'MENTION' | 'ASSIGNMENT' | 'COMMENT' | 'ROLE_CHANGED' | 'DUE_SOON';
   createdAt: string;
   readAt: string | null;
-  actor: { id: string; displayName: string };
+  actor: { id: string; displayName: string } | null;
   workspace: { name: string };
-  task: { title: string; archivedAt: string | null } | null;
+  task: {
+    title: string;
+    archivedAt: string | null;
+    dueAt: string | null;
+  } | null;
 };
 export type NotificationPage = {
   items: Notification[];

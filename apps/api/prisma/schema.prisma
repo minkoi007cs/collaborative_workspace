@@ -186,6 +186,7 @@ model Task {
   @@unique([columnId, rank])
   @@index([boardId, archivedAt])
   @@index([columnId, rank])
+  @@index([dueAt, id])
   @@map("tasks")
 }
 
@@ -259,6 +260,7 @@ enum NotificationType {
   ASSIGNMENT
   COMMENT
   ROLE_CHANGED
+  DUE_SOON
 }
 
 model Notification {
@@ -267,15 +269,16 @@ model Notification {
   taskId      String?          @map("task_id") @db.Uuid
   commentId   String?          @map("comment_id") @db.Uuid
   recipientId String           @map("recipient_id") @db.Uuid
-  actorId     String           @map("actor_id") @db.Uuid
+  actorId     String?          @map("actor_id") @db.Uuid
   type        NotificationType
+  dedupeKey   String?          @unique @map("dedupe_key") @db.VarChar(200)
   createdAt   DateTime         @default(now()) @map("created_at")
   readAt      DateTime?        @map("read_at")
   workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   task        Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
   comment     Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  actor       User             @relation("NotificationActor", fields: [actorId], references: [id])
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id])
 
   @@index([recipientId, createdAt])
   @@index([workspaceId, createdAt])

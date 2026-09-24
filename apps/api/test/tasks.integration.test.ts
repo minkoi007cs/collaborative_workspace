@@ -8,6 +8,7 @@ import { NestFactory } from '@nestjs/core';
 import { PrismaClient } from '@prisma/client';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { AppModule } from '../src/app.module';
+import { DueReminderService } from '../src/notifications/due-reminder.service';
 
 test('tasks enforce workspace roles, board lineage, membership, rank and versions', async () => {
   const { publicKey, privateKey } = await generateKeyPair('ES256');
@@ -494,6 +495,30 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       ownerInboxAfterAssignment.items.some(
         (item) => item.type === 'ASSIGNMENT' && item.taskId === task.id,
       ),
+    );
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { dueAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+    const reminders = app.get(DueReminderService);
+    await reminders.runOnce();
+    await reminders.runOnce();
+    assert.equal(
+      await prisma.notification.count({
+        where: { taskId: task.id, recipientId: ownerId, type: 'DUE_SOON' },
+      }),
+      1,
+    );
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { dueAt: new Date(Date.now() - 5 * 60 * 1000) },
+    });
+    await reminders.runOnce();
+    assert.equal(
+      await prisma.notification.count({
+        where: { taskId: task.id, recipientId: ownerId, type: 'DUE_SOON' },
+      }),
+      2,
     );
     const labelResponse = await send(
       `/projects/${project.id}/labels`,

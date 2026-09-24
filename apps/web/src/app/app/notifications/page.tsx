@@ -73,14 +73,25 @@ export default async function NotificationsPage({
             >
               <div>
                 <p>
-                  <strong>{item.actor.displayName}</strong>{' '}
-                  {item.type === 'MENTION'
-                    ? 'mentioned you in'
-                    : item.type === 'ASSIGNMENT'
-                      ? 'assigned you to'
-                      : item.type === 'COMMENT'
-                        ? 'commented on'
-                        : 'changed your role in'}{' '}
+                  {item.type === 'DUE_SOON' ? (
+                    item.task?.dueAt &&
+                    new Date(item.task.dueAt) <= new Date() ? (
+                      'Task overdue:'
+                    ) : (
+                      'Due within 24 hours:'
+                    )
+                  ) : (
+                    <>
+                      <strong>{item.actor?.displayName ?? 'A teammate'}</strong>{' '}
+                      {item.type === 'MENTION'
+                        ? 'mentioned you in'
+                        : item.type === 'ASSIGNMENT'
+                          ? 'assigned you to'
+                          : item.type === 'COMMENT'
+                            ? 'commented on'
+                            : 'changed your role in'}
+                    </>
+                  )}{' '}
                   {item.task && item.taskId ? (
                     item.task.archivedAt ? (
                       <strong>{item.task.title}</strong>

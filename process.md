@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 11 — Notification inbox and core events (locally implemented and tested; reminders/delivery pending)
-Current Milestone: Member-scoped notification inbox, read state, and action-driven alerts
+Current Phase: Phase 11 — Notifications (inbox, events, and due reminders locally implemented; invitation email pending)
+Current Milestone: Member-scoped notification inbox, read state, action alerts, and idempotent due reminders
 Current Branch: main
-Current Focus: Complete Phase 11 scheduled reminders and invitation delivery, then Phase 12 attachments
-Last Completed Feature: Paginated notification inbox, unread counts/read state, and mention/comment/assignment/role events
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; due-date reminders and invitation delivery absent; inbox requires refresh; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Add idempotent due-date reminder worker and invitation email delivery when provider is configured
+Current Focus: Invitation email delivery and Phase 12 attachments
+Last Completed Feature: Idempotent 24-hour due reminders for current task assignees
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; invitation email delivery absent; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Configure invitation email provider or proceed with Phase 12 attachments
 
 ---
 
@@ -965,3 +965,89 @@ Phases 0–10 and Phase 11 inbox/core event paths are locally implemented and te
 ### Next Recommended Task
 
 Build an idempotent due-date reminder worker and configure invitation email delivery, then proceed to Phase 12 attachments.
+
+## [2026-09-24] Change ID: PROC-012
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(notifications): schedule deduplicated due reminders`
+
+### Summary
+
+Added an API worker that creates inbox reminders for current assignees of active tasks due in the next 24 hours or recently overdue, with database-enforced deduplication.
+
+### Reason
+
+Repeated scans and multiple API instances must not flood recipients with the same reminder. A member who was removed must not receive a new task alert.
+
+### Features Added
+
+- A due reminder scan at API startup and every 15 minutes, covering tasks due within 24 hours or overdue by less than 24 hours so short deadlines are not missed between scans.
+- Unique reminder keys per task, exact due time, and recipient; a due-date change can generate a fresh reminder.
+- Task due-date index and a system `DUE_SOON` notification type, rendered in the inbox.
+- Integration test runs the worker twice and confirms one reminder.
+
+### Features Modified
+
+- `Notification.actorId` is nullable for system notices. The inbox renders system reminders without a person actor.
+- README, architecture spec, audit, and current status describe the new delivery behavior.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- Prisma schema and two migrations, notifications module/worker, notification web type/page, task integration test, README, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+Applied `20260924045400_due_reminder_dedup` and `20260924045500_due_task_index` locally. Notifications gain `DUE_SOON`, nullable `actor_id`, and a unique nullable `dedupe_key`; tasks gain `(due_at, id)` index.
+
+### API Changes
+
+- No new route. Existing inbox routes show the new type.
+
+### WebSocket Changes
+
+- No new event. Scheduled reminders appear after inbox refresh; the worker does not emit socket hints.
+
+### Security Impact
+
+The scan includes only non-archived, non-completed tasks in active projects/workspaces and intersects assignees with current workspace memberships. Inbox authorization remains recipient and membership scoped.
+
+### Tests Added or Updated
+
+- Task integration suite sets a due date, scans twice, checks a single `DUE_SOON` record, then moves the deadline five minutes into the past and verifies one fresh reminder for the changed due time.
+
+### Tests Run
+
+- Both migrations deployed locally and Prisma client generated.
+- Biome format/lint and API/web TypeScript: passed.
+- Full serial API integration suite: 6/6 passed.
+- API TypeScript production build and Next.js production build: passed.
+- Live authenticated browser UI not tested because Supabase project credentials are absent.
+
+### Known Problems
+
+The worker scans every 15 minutes; a reminder can appear late by that interval and only in the inbox. Deadlines overdue by more than 24 hours do not get a reminder. Invitation email delivery remains unavailable without a provider. A task hard delete removes its related reminder rows by foreign-key cascade. Activity logging and sockets remain best effort.
+
+### Technical Debt Introduced
+
+The worker processes due tasks in 100-task transactions. Query performance and scan duration need production measurement. A dedicated job process may replace the in-API timer as scale grows. No email/push channel exists for reminders.
+
+### Architecture Decisions
+
+The database unique key is the cross-instance deduplication boundary; `createMany(skipDuplicates)` makes repeat scans harmless. The worker uses a fixed UTC scan window per run and current membership at insertion time. System notices have no human actor.
+
+### tech.nmd Updated?
+
+Yes; notification model, scan behavior, current status, and delivery limits updated.
+
+### Current Project State After This Change
+
+Phase 11 inbox, core action alerts, and due reminders are locally implemented and tested. Invitation email delivery remains open, so Phase 11 as a whole is not marked complete. Phase 12 attachments and later roadmap work remain.
+
+### Next Recommended Task
+
+Configure an invitation email provider or proceed to Phase 12 private attachments.

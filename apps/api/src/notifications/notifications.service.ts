@@ -19,7 +19,7 @@ const notificationSelect = {
   readAt: true,
   actor: { select: { id: true, displayName: true } },
   workspace: { select: { name: true } },
-  task: { select: { title: true, archivedAt: true } },
+  task: { select: { title: true, archivedAt: true, dueAt: true } },
 } as const;
 
 @Injectable()
