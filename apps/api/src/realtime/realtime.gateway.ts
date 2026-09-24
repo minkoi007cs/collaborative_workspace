@@ -1,4 +1,5 @@
 import { Inject, Logger } from '@nestjs/common';
+import { WorkspaceRole } from '@prisma/client';
 import {
   ConnectedSocket,
   MessageBody,
@@ -116,6 +117,12 @@ export class RealtimeGateway
       });
   }
 
+  private async dropTaskRoom(client: AuthorizedSocket) {
+    this.stopTyping(client);
+    if (client.data.taskId) await client.leave(`task:${client.data.taskId}`);
+    client.data.taskId = undefined;
+  }
+
   private async dropPresence(client: AuthorizedSocket) {
     const workspaceId = client.data.workspaceId;
     if (!workspaceId) return;
@@ -157,6 +164,7 @@ export class RealtimeGateway
         input.data.boardId,
       );
       const workspaceId = board.project.workspaceId;
+      await this.dropTaskRoom(client);
       if (client.data.workspaceId && client.data.workspaceId !== workspaceId)
         await this.dropPresence(client);
       for (const room of client.rooms) {
@@ -206,6 +214,7 @@ export class RealtimeGateway
     if (!input.success) return { ok: false, error: 'invalid_board' };
     if (!client.rooms.has(`board:${input.data.boardId}`))
       return { ok: false, error: 'not_joined' };
+    await this.dropTaskRoom(client);
     for (const room of client.rooms) {
       if (room.startsWith('board:') || room.startsWith('workspace:'))
         client.leave(room);
@@ -269,8 +278,7 @@ export class RealtimeGateway
         task.boardId,
       );
       await this.dropPresence(client);
-      this.stopTyping(client);
-      if (client.data.taskId) await client.leave(`task:${client.data.taskId}`);
+      await this.dropTaskRoom(client);
       for (const room of client.rooms) {
         if (room.startsWith('board:') || room.startsWith('workspace:'))
           await client.leave(room);
@@ -307,7 +315,7 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('typing')
-  typing(
+  async typing(
     @ConnectedSocket() client: AuthorizedSocket,
     @MessageBody() payload: unknown,
   ) {
@@ -321,6 +329,21 @@ export class RealtimeGateway
     if (!input.data.active) {
       this.stopTyping(client);
       return { ok: true };
+    }
+    try {
+      const task = await this.prisma.task.findFirst({
+        where: { id: input.data.taskId, archivedAt: null },
+        select: { boardId: true },
+      });
+      if (!task || task.boardId !== client.data.boardId)
+        return { ok: false, error: 'not_found' };
+      await this.projects.requireBoard(
+        client.data.identity,
+        task.boardId,
+        WorkspaceRole.EDITOR,
+      );
+    } catch {
+      return { ok: false, error: 'forbidden' };
     }
     if (Date.now() - (client.data.lastTyping ?? 0) < 1000) return { ok: true };
     client.data.lastTyping = Date.now();

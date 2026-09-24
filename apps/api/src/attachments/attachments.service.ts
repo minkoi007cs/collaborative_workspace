@@ -89,24 +89,25 @@ export class AttachmentsService {
       taskId,
     );
     const uploaderId = (await this.users.getOrCreate(identity)).id;
-    const readyCount = await this.prisma.attachment.count({
-      where: { taskId, status: AttachmentStatus.READY },
-    });
-    if (readyCount >= 20)
-      throw new BadRequestException('Task has reached the attachment limit');
     const id = randomUUID();
     const storagePath = `${workspaceId}/${taskId}/${id}`;
-    const attachment = await this.prisma.attachment.create({
-      data: {
-        id,
-        taskId,
-        uploaderId,
-        fileName: input.fileName,
-        contentType: input.contentType,
-        size: input.size,
-        storagePath,
-      },
-      select: attachmentSelect,
+    const attachment = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${taskId}::uuid FOR UPDATE`;
+      const reservedCount = await tx.attachment.count({ where: { taskId } });
+      if (reservedCount >= 20)
+        throw new BadRequestException('Task has reached the attachment limit');
+      return tx.attachment.create({
+        data: {
+          id,
+          taskId,
+          uploaderId,
+          fileName: input.fileName,
+          contentType: input.contentType,
+          size: input.size,
+          storagePath,
+        },
+        select: attachmentSelect,
+      });
     });
     try {
       const signedUrl = await this.storage.signUpload(storagePath);

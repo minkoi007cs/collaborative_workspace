@@ -1,3 +1,8 @@
 packages:
   - apps/*
   - packages/*
+
+overrides:
+  'next>postcss': 8.5.28
+  '@nestjs/platform-express>multer': 2.4.0
+  '@prisma/config>deepmerge-ts': 8.0.0

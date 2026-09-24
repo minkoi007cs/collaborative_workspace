@@ -261,6 +261,12 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
         .emitWithAck('task.join', { taskId: task.id }),
       { ok: true },
     );
+    assert.deepEqual(
+      await taskWatcher
+        .timeout(3000)
+        .emitWithAck('typing', { taskId: task.id, active: true }),
+      { ok: false, error: 'forbidden' },
+    );
     const commentEvent = waitFor<{ taskId: string; entityId: string }>(
       taskWatcher,
       'comment.created',
@@ -301,6 +307,58 @@ test('realtime authenticates, scopes rooms, delivers comments and tracks multi-t
       { ok: true },
     );
     assert.equal((await typingStopped).taskId, task.id);
+
+    const navigator = socket(owner);
+    const navigatorConnected = waitFor<void>(navigator, 'connect');
+    navigator.connect();
+    await navigatorConnected;
+    assert.deepEqual(
+      await navigator
+        .timeout(3000)
+        .emitWithAck('task.join', { taskId: task.id }),
+      { ok: true },
+    );
+    assert.equal(
+      (
+        (await navigator
+          .timeout(3000)
+          .emitWithAck('board.join', { boardId: secondBoard.id })) as {
+          ok: boolean;
+        }
+      ).ok,
+      true,
+    );
+    assert.deepEqual(
+      await navigator
+        .timeout(3000)
+        .emitWithAck('typing', { taskId: task.id, active: true }),
+      { ok: false, error: 'not_joined' },
+    );
+    let staleTaskEvent = false;
+    navigator.on('comment.created', () => {
+      staleTaskEvent = true;
+    });
+    const currentTaskEvent = waitFor<{ taskId: string }>(
+      taskWatcher,
+      'comment.created',
+    );
+    assert.equal(
+      (
+        await send(`/tasks/${task.id}/comments`, owner, 'POST', {
+          content: 'After navigation',
+        })
+      ).status,
+      201,
+    );
+    assert.equal((await currentTaskEvent).taskId, task.id);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(staleTaskEvent, false);
+    assert.deepEqual(
+      await navigator
+        .timeout(3000)
+        .emitWithAck('board.leave', { boardId: secondBoard.id }),
+      { ok: true },
+    );
 
     const boardEvent = waitFor<{ boardId: string; version: number }>(
       watcher,

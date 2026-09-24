@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 16 cross-instance Socket.IO fanout implemented locally; Phase 14 hardening continues
-Current Milestone: Redis-backed room events and remote socket revocation
+Current Phase: Phase 14 hardening and product audit following Phase 16 delivery
+Current Milestone: Realtime room authorization, public UX, and dependency security verified locally
 Current Branch: main
 Current Focus: Configure and validate Supabase Auth and private Storage, then prepare deployment operations
-Last Completed Feature: Phase 16 cross-instance Socket.IO fanout passed two-instance tests and GitHub CI
-Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay; archive restore absent
-Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA; plan deployment operations
+Last Completed Feature: Local audit fixes for realtime rooms, typing permission, invitation continuation, upload quota, landing UX, and transitive advisories
+Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay; archive restore absent
+Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA; address upload reconciliation; plan deployment operations
 
 ---
 
@@ -1704,3 +1704,93 @@ Phase 16 is on `main`, remotely verified, and this documentation update remains 
 ### Next Recommended Task
 
 Supply Supabase project configuration for live account and private file QA; prepare deployment runbooks and release gates.
+
+## [2026-09-24] Change ID: PROC-021
+
+Author: Codex
+Branch: main
+Planned Commit Message: `fix(audit): harden realtime rooms and refresh public experience`
+
+### Summary
+
+Audited the functional modules, authorization, public/auth UX, and production dependencies. Fixed stale task subscriptions, viewer typing, stale invitation redirects, a concurrent attachment quota race, and outdated public product messaging. Resolved the current production dependency advisories.
+
+### Reason
+
+Room navigation could retain an old task subscription, typing accepted viewers, a prior invitation could unexpectedly redirect later sign-ins, and the public page described implemented features as unfinished. Upload quota reservations could also race. The production dependency audit found nine transitive advisories.
+
+### Features Added
+
+- New public landing with accurate collaboration features and an account-unavailable state.
+- `docs/audit-2026-09-24.md` with prioritized findings, UX assessment, product direction, test evidence, and release risks.
+- Regression coverage for task-room navigation, viewer typing, concurrent upload reservations, and ordinary sign-in after an invitation.
+
+### Features Modified
+
+- Board/task socket transitions leave previous task rooms and stop typing; active typing checks current editor authorization.
+- Login/signup middleware clears an old invitation destination unless the current request supplies a validated one.
+- Upload reservations lock the task row and count pending plus ready attachments inside a transaction.
+- Root pnpm overrides pin patched PostCSS, Multer, and deepmerge-ts versions.
+
+### Features Removed
+
+- Stale foundation marketing copy.
+
+### Files / Modules Affected
+
+- `apps/api/src/realtime/realtime.gateway.ts`, `apps/api/test/realtime.integration.test.ts`, `apps/api/src/attachments/attachments.service.ts`, `apps/api/test/tasks.integration.test.ts`, `apps/web/src/middleware.ts`, `apps/web/test/auth-next.unit.test.ts`, `apps/web/src/app/page.tsx`, `apps/web/src/app/globals.css`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `docs/audit-2026-09-24.md`, `tech.nmd`, and `process.md`.
+
+### Database Changes
+
+None.
+
+### API Changes
+
+No REST contract changes. Upload quota is enforced atomically on all pending and ready reservations.
+
+### WebSocket Changes
+
+Navigation away from a task now removes its room membership; active typing requires editor access to the current task board.
+
+### Security Impact
+
+Closes stale task event delivery and viewer typing authorization gaps. Concurrent uploads can no longer exceed the task quota. Patched production dependencies and reran audit. Invitation destination cookies no longer carry into unrelated sign-ins.
+
+### Tests Added or Updated
+
+- Realtime integration assertions for viewer typing and old-task room delivery after board navigation.
+- Web unit test for invitation destination clearing.
+- Task integration test races 21 upload requests and expects exactly 20 successful reservations.
+
+### Tests Run
+
+- `pnpm check`: passed; format/lint and API/web typechecks passed, 2 governance, 3 API unit, and 2 web unit tests passed.
+- `pnpm test:integration`: 6 passed against local PostgreSQL/Redis.
+- `pnpm build`: API and Next.js production builds passed.
+- `pnpm audit --prod --audit-level high`: no known vulnerabilities at audit time.
+- Browser: inspected public landing and login in local development mode; signed-in and mobile screens were not verified.
+- Remote GitHub Actions for this commit: pending at log creation.
+
+### Known Problems
+
+Supabase Auth and private Storage are not configured, so live account, Google OAuth, authenticated UI, and real upload flows remain untested. Abandoned uploads need cleanup and can consume quota. Email delivery, deployment, and durable event replay remain open.
+
+### Technical Debt Introduced
+
+The three transitive dependency overrides should be removed once upstream packages adopt patched versions. No new runtime feature debt was introduced.
+
+### Architecture Decisions
+
+Keep REST as durable data truth and require current editor authorization for transient typing. Use scoped pnpm overrides for vulnerable transitive packages while retaining current tested major framework versions. See the audit document for product priorities.
+
+### tech.nmd Updated?
+
+Yes; realtime subscription behavior, current verification, and known risks updated.
+
+### Current Project State After This Change
+
+Core collaboration modules and this audit patch pass local automated checks and builds. Full product release readiness still depends on external Supabase setup and signed-in/browser QA. This commit has not yet been pushed or checked by remote CI.
+
+### Next Recommended Task
+
+Configure Supabase Auth/Storage, run a two-user end-to-end pass, add upload reconciliation, and prepare deployment operations.

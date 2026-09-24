@@ -258,6 +258,28 @@ test('tasks enforce workspace roles, board lineage, membership, rank and version
       await (await send(`/tasks/${task.id}/attachments`, viewer)).json(),
       [],
     );
+    const reservations = await Promise.all(
+      Array.from({ length: 21 }, (_, index) =>
+        send(
+          `/tasks/${task.id}/attachments/upload-url`,
+          index < 10 ? owner : editor,
+          'POST',
+          {
+            fileName: `reserved-${index}.txt`,
+            contentType: 'text/plain',
+            size: 4,
+          },
+        ),
+      ),
+    );
+    assert.deepEqual(
+      reservations.map((response) => response.status).sort(),
+      [...Array(20).fill(201), 400].sort(),
+    );
+    assert.equal(
+      await prisma.attachment.count({ where: { taskId: task.id } }),
+      20,
+    );
     assert.equal(
       (await send(`/workspaces/${workspaceId}/search?q=release`, outsider))
         .status,

@@ -9,15 +9,18 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname === '/signup'
   ) {
     const response = NextResponse.next({ request });
-    const requested = request.nextUrl.searchParams.get('next');
-    if (requested && safeNextPath(requested) !== '/app') {
-      response.cookies.set('syncspace_auth_next', requested, {
+    const nextPath = safeNextPath(request.nextUrl.searchParams.get('next'));
+    if (nextPath !== '/app') {
+      response.cookies.set('syncspace_auth_next', nextPath, {
         httpOnly: true,
         sameSite: 'lax',
         secure: request.nextUrl.protocol === 'https:',
         maxAge: 600,
         path: '/',
       });
+      response.headers.set('Cache-Control', 'private, no-store');
+    } else if (request.cookies.has('syncspace_auth_next')) {
+      response.cookies.delete('syncspace_auth_next');
       response.headers.set('Cache-Control', 'private, no-store');
     }
     return response;
