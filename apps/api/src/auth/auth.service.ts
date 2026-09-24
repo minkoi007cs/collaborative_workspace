@@ -12,6 +12,7 @@ const claimsSchema = z.object({
   sub: z.string().uuid(),
   email: z.string().email(),
   role: z.literal('authenticated'),
+  exp: z.number().int().positive(),
   is_anonymous: z.literal(false).optional(),
 });
 
@@ -42,7 +43,11 @@ export class AuthService {
         algorithms: ['ES256', 'RS256'],
       });
       const claims = claimsSchema.parse(payload);
-      return { subject: claims.sub, email: claims.email };
+      return {
+        subject: claims.sub,
+        email: claims.email,
+        expiresAt: claims.exp,
+      };
     } catch {
       throw new UnauthorizedException('Invalid access token');
     }

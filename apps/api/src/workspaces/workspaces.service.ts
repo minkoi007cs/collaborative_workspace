@@ -10,6 +10,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { AuthIdentity } from '../auth/auth.types';
 import { PrismaService } from '../database/prisma.service';
 import { UsersService } from '../users/users.service';
+import { RealtimePublisher } from '../realtime/realtime.publisher';
 import { WorkspaceAccessService } from './workspace-access.service';
 
 const workspaceSelect = {
@@ -27,6 +28,7 @@ export class WorkspacesService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(WorkspaceAccessService)
     private readonly access: WorkspaceAccessService,
+    @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
   ) {}
 
   private async userId(identity: AuthIdentity) {
@@ -222,6 +224,7 @@ export class WorkspacesService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      this.realtime.evictUser(userId);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -239,6 +242,7 @@ export class WorkspacesService {
       where: { id: workspaceId },
       data: { archivedAt: new Date() },
     });
+    this.realtime.evictWorkspace(workspaceId);
     return { archived: true };
   }
 

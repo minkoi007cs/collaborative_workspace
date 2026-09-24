@@ -2,13 +2,13 @@
 
 ## Current Status
 
-Current Phase: Phase 5 — Tasks (locally implemented and tested)
-Current Milestone: Task editing, assignment, labels, rank-based movement, and board interactions
+Current Phase: Phase 6 — Authenticated real-time board events (locally implemented and tested)
+Current Milestone: Verified Socket.IO connections, authorized board rooms, and client reconciliation
 Current Branch: main
-Current Focus: Transition to Phase 6 authenticated real-time delivery
-Last Completed Feature: Task CRUD, assignment, labels, ordering, copy/archive/delete, and optimistic board movement
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no real-time/presence/comments/activity; invitation email and archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Implement Phase 6 authenticated Socket.IO events and board reconciliation
+Current Focus: Phase 7 multi-tab Redis presence
+Last Completed Feature: Task and board event publication after REST commits, secure room joins, and board refresh on socket events
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; no presence/comments/activity; socket publication has no durable replay or multi-instance adapter; invitation email and archive restore absent; first GitHub CI run still needs review
+Next Recommended Task: Implement Phase 7 Redis-backed workspace presence and multi-tab disconnect semantics
 
 ---
 
@@ -446,3 +446,92 @@ Phases 0–5 are locally implemented and tested. Main branch has been pushed thr
 ### Next Recommended Task
 
 Implement Phase 6 authenticated Socket.IO events, authorized rooms, and client board refresh on relevant events.
+
+## [2026-09-24] Change ID: PROC-006
+
+Author: Codex
+Branch: main
+Planned Commit Message: `feat(realtime): deliver authorized board events`
+
+### Summary
+
+Implemented Phase 6 Socket.IO board updates. API connections validate Supabase JWTs, board joins check membership through project/workspace lineage, REST task and column mutations emit small events after commit, and board pages refresh on relevant events or reconnection.
+
+### Reason
+
+Phase 5 board state required manual refresh to show teammates' changes. Socket transport also needed explicit authentication, room isolation, expiry, and revocation before serving collaboration events.
+
+### Features Added
+
+- `/realtime` namespace with handshake token and origin checks, a JWT-expiry disconnect timer, authorized `board.join`, `board.leave`, user/workspace/board rooms, and one-board-per-socket room switching.
+- Task created/updated/moved/deleted and board updated events carrying actor, entity, scope, version, event ID, and timestamp. REST remains canonical; publication is best effort after committed mutations.
+- Board client obtains the current Supabase access token, joins its room, deduplicates event IDs, refreshes server state after events/reconnect, and shows connection status. A server disconnect triggers reauthentication and rejoin.
+- Socket integration test for invalid token, outsider denial, viewer access, cross-board isolation, committed task/board events, and member-removal disconnect.
+
+### Features Modified
+
+- JWT identity now includes required expiry for socket lifetime.
+- Integration suites run serially to avoid nondeterministic PostgreSQL serializable transaction conflicts between unrelated test fixtures.
+- Task movement refreshes canonical board state after network or conflict rollback.
+
+### Features Removed
+
+- None.
+
+### Files / Modules Affected
+
+- `apps/api/src/realtime`, auth, workspace, project, and task controllers/services; API integration tests; `apps/web` board provider/page; package manifests, lockfile, README, `tech.nmd`, and audit.
+
+### Database Changes
+
+None.
+
+### API Changes
+
+Existing task and column REST responses remain unchanged. Their successful mutations now publish matching events after the database operation completes.
+
+### WebSocket Changes
+
+Added `/realtime`, `board.join`, `board.leave`, and `task.created`, `task.updated`, `task.moved`, `task.deleted`, `board.updated`. Events contain identifiers and version, with empty payload; clients fetch canonical REST state.
+
+### Security Impact
+
+JWT signature/issuer/audience/expiry and local user identity are verified before the socket connects. An authorized board lookup precedes room membership. Removed members and archived workspace members are disconnected. Tokens are not logged. A socket cannot remain connected beyond token expiry.
+
+### Tests Added or Updated
+
+- Added realtime integration suite using local signed JWT/JWKS and real Socket.IO clients, PostgreSQL, and Nest app.
+- Added auth integration case rejecting tokens without `exp`.
+
+### Tests Run
+
+- API and web TypeScript checks: passed.
+- Biome format and lint: passed.
+- Governance and API unit tests: passed.
+- API integration suite, serial: 6/6 passed; one parallel run showed a transient 409 in an unrelated board transaction, then the board test passed alone.
+- API TypeScript build and Next.js production build: passed.
+- Authenticated browser two-user test: not run because Supabase project configuration is absent.
+
+### Known Problems
+
+No durable event outbox or replay; an event may be missed if publication fails after a REST commit, and multi-instance delivery requires the Phase 16 Redis adapter. Browser UI and token refresh behavior have not been exercised with live Supabase accounts. Presence, comments, activity, notifications, files, search, and production deployment remain unimplemented. GitHub CI status is still unverified.
+
+### Technical Debt Introduced
+
+Client refreshes the whole board on every relevant event. Large boards and high event volume will benefit from a scoped cache and event batching. Room revocation currently disconnects all of a removed user's sockets, including sockets used in other workspaces, which is safe but can cause a brief reconnect there.
+
+### Architecture Decisions
+
+REST is the source of truth and WebSocket events are invalidation signals. Each socket can join one board at a time; room authorization is checked on every join. The server uses best-effort post-commit publication now and records the need for outbox/replay before stronger delivery guarantees or production scale.
+
+### tech.nmd Updated?
+
+Yes; Phase 6 architecture, event catalog, security, status, and technical debt updated.
+
+### Current Project State After This Change
+
+Phases 0–6 are locally implemented and tested. Main has been pushed through Phase 5; this Phase 6 commit will be pushed after final checks. The product has secure board events but lacks live provider credentials and several MVP features.
+
+### Next Recommended Task
+
+Implement Phase 7 Redis-backed workspace presence with multi-tab semantics, authorization, expiry, and two-client tests.

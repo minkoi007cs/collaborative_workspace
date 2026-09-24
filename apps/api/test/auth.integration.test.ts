@@ -78,6 +78,20 @@ test('protected profile rejects missing and forged tokens and saves verified ide
       ).status,
       401,
     );
+    const noExpiry = await new SignJWT({
+      email: 'alice@example.test',
+      role: 'authenticated',
+    })
+      .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
+      .setSubject(subject)
+      .setIssuer(`${projectUrl}/auth/v1`)
+      .setAudience('authenticated')
+      .sign(privateKey);
+    assert.equal(
+      (await fetch(url, { headers: { Authorization: `Bearer ${noExpiry}` } }))
+        .status,
+      401,
+    );
     const expired = await new SignJWT({
       email: 'alice@example.test',
       role: 'authenticated',

@@ -142,7 +142,7 @@ export default async function BoardPage({
             </p>
           )}
         <TaskBoardProvider
-          key={`${boardId}:${tasks.map((task) => `${task.id}:${task.version}`).join(',')}`}
+          boardId={boardId}
           columns={board.columns}
           initialTasks={tasks}
           canEdit={canEdit}

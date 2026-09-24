@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
 import type { BoardColumn, Task } from '@/lib/api/types';
+import { browserClient } from '@/lib/supabase/browser';
 import { moveTaskOnBoard } from '../../task-actions';
 
 type BoardTasksContext = {
@@ -26,11 +28,13 @@ function useBoardTasks() {
 }
 
 export function TaskBoardProvider({
+  boardId,
   columns,
   initialTasks,
   canEdit,
   children,
 }: {
+  boardId: string;
   columns: BoardColumn[];
   initialTasks: Task[];
   canEdit: boolean;
@@ -39,7 +43,85 @@ export function TaskBoardProvider({
   const [tasks, setTasks] = useState(initialTasks);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [liveStatus, setLiveStatus] = useState<
+    'connecting' | 'connected' | 'unavailable'
+  >('connecting');
+  const pendingRef = useRef(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!pendingRef.current) setTasks(initialTasks);
+  }, [initialTasks]);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) {
+      setLiveStatus('unavailable');
+      return;
+    }
+    const socket = io(`${new URL(apiUrl).origin}/realtime`, {
+      autoConnect: false,
+      transports: ['websocket'],
+      auth: (callback) => {
+        try {
+          browserClient()
+            .auth.getSession()
+            .then(({ data }) =>
+              callback({ token: data.session?.access_token ?? '' }),
+            )
+            .catch(() => callback({ token: '' }));
+        } catch {
+          callback({ token: '' });
+        }
+      },
+    });
+    const seen = new Set<string>();
+    const refresh = (event?: { eventId?: string; boardId?: string }) => {
+      if (event && event.boardId !== boardId) return;
+      if (event?.eventId) {
+        if (seen.has(event.eventId)) return;
+        seen.add(event.eventId);
+        if (seen.size > 100) seen.delete(seen.values().next().value as string);
+      }
+      if (!pendingRef.current) router.refresh();
+    };
+    socket.on('connect', () => {
+      socket
+        .timeout(5000)
+        .emit(
+          'board.join',
+          { boardId },
+          (timeout: Error | null, result?: { ok: boolean }) => {
+            if (timeout || !result?.ok) {
+              setLiveStatus('unavailable');
+              socket.disconnect();
+              return;
+            }
+            setLiveStatus('connected');
+            refresh();
+          },
+        );
+    });
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io client disconnect') return;
+      setLiveStatus('connecting');
+      if (reason === 'io server disconnect') socket.connect();
+    });
+    socket.on('connect_error', () => setLiveStatus('unavailable'));
+    for (const name of [
+      'task.created',
+      'task.updated',
+      'task.moved',
+      'task.deleted',
+      'board.updated',
+    ]) {
+      socket.on(name, refresh);
+    }
+    socket.connect();
+    return () => {
+      socket.disconnect();
+    };
+  }, [boardId, router]);
 
   async function move(
     taskId: string,
@@ -67,6 +149,7 @@ export function TaskBoardProvider({
     }
     remaining.splice(index, 0, { ...task, columnId: toColumnId });
     setTasks(remaining);
+    pendingRef.current = true;
     setPending(true);
     setError('');
     let result: Awaited<ReturnType<typeof moveTaskOnBoard>>;
@@ -78,11 +161,14 @@ export function TaskBoardProvider({
         beforeTaskId,
       });
     } catch {
+      pendingRef.current = false;
       setPending(false);
       setTasks(previous);
       setError('Could not connect to the server. Try again.');
+      router.refresh();
       return;
     }
+    pendingRef.current = false;
     setPending(false);
     if (result.error) {
       setTasks(previous);
@@ -95,6 +181,7 @@ export function TaskBoardProvider({
           ? 'Another edit changed this task. Refresh the board to review it.'
           : 'Could not move this task. Try again.',
       );
+      router.refresh();
       return;
     }
     if (result.task)
@@ -119,6 +206,13 @@ export function TaskBoardProvider({
           {error}
         </p>
       )}
+      <p className="board-hint" role="status">
+        {liveStatus === 'connected'
+          ? 'Live updates on'
+          : liveStatus === 'connecting'
+            ? 'Connecting live updates…'
+            : 'Live updates unavailable. Refresh to see new changes.'}
+      </p>
       {children}
     </Context.Provider>
   );

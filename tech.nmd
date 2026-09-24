@@ -24,7 +24,7 @@ Read `AGENTS.md`, this file, and `process.md` before changing code. Every meanin
 
 ## 6. Technology Stack
 
-pnpm monorepo; Next.js App Router, React, strict TypeScript, Tailwind CSS; NestJS API; PostgreSQL with Prisma migrations; Redis; Supabase Auth with `@supabase/ssr` and JOSE JWT verification. Socket.IO enters Phase 6. Dependencies are pinned in the lockfile. TanStack Query, React Hook Form, and dnd-kit enter when their features are implemented.
+pnpm monorepo; Next.js App Router, React, strict TypeScript, Tailwind CSS; NestJS API; PostgreSQL with Prisma migrations; Redis; Supabase Auth with `@supabase/ssr` and JOSE JWT verification; Socket.IO for board events. Dependencies are pinned in the lockfile. TanStack Query, React Hook Form, and dnd-kit enter when their features are implemented.
 
 ## 7. System Architecture
 
@@ -45,7 +45,7 @@ The browser sends resource mutations through REST. The API validates identity, m
 
 ## 9. Frontend Architecture
 
-Use App Router and server rendering where practical. Auth pages use a Supabase browser client; protected `/app` pages use a server client with cookie sessions, `getClaims()` verification, and a bearer token to fetch canonical API data. Middleware refreshes cookies and forwards private cache headers. Invite continuation is restricted to `/invite/<token>` and stored briefly in an HttpOnly cookie through OAuth. Client components handle interactive forms and sign-out. Phase 3 pages list/create workspaces, manage members/settings, show a one-time invitation link, and accept invitations. Phase 4 pages list/create projects and boards, edit project settings, and add/rename/reorder/delete columns with version conflict feedback. TanStack Query will own remote cache and socket-triggered invalidation later; lightweight local state owns view-only state. Task drag/drop on boards applies a provisional client move, rolls back on failure, and provides keyboard arrow movement. Phase 6 will reconcile remote edits. Theme modes: light, dark, system, persisted per user in a later phase.
+Use App Router and server rendering where practical. Auth pages use a Supabase browser client; protected `/app` pages use a server client with cookie sessions, `getClaims()` verification, and a bearer token to fetch canonical API data. Middleware refreshes cookies and forwards private cache headers. Invite continuation is restricted to `/invite/<token>` and stored briefly in an HttpOnly cookie through OAuth. Client components handle interactive forms and sign-out. Phase 3 pages list/create workspaces, manage members/settings, show a one-time invitation link, and accept invitations. Phase 4 pages list/create projects and boards, edit project settings, and add/rename/reorder/delete columns with version conflict feedback. Board task state uses local optimistic movement and server refresh after Socket.IO events; TanStack Query may replace this cache strategy later. Task drag/drop rolls back on failure and provides keyboard arrow movement. Theme modes: light, dark, system, persisted per user in a later phase.
 
 ## 10. Backend Architecture
 
@@ -61,11 +61,11 @@ Implemented: `User(id, authSubject, email, displayName, createdAt, updatedAt)` w
 
 ## 13. Authentication Architecture
 
-Phase 2 implementation: Supabase Auth email/password and Google OAuth via PKCE callback. SSR stores session in cookies. Next.js `getClaims()` verifies before rendering `/app`; middleware refreshes the session and returns cache headers. The browser/server forwards the access token to NestJS. API independently verifies ES256/RS256 JWT signature against the configured project's JWKS, issuer `${SUPABASE_URL}/auth/v1`, audience `authenticated`, expiry, UUID subject, role, email, and non-anonymous claim. The verified subject maps to a local `User`, created on first protected profile access. Neither cookie content nor client-supplied IDs authorize the API. Socket handshake will reuse verification in Phase 6. The provider URL/publishable key and Google provider must be configured externally; no service role key is used.
+Phase 2 implementation: Supabase Auth email/password and Google OAuth via PKCE callback. SSR stores session in cookies. Next.js `getClaims()` verifies before rendering `/app`; middleware refreshes the session and returns cache headers. The browser/server forwards the access token to NestJS. API independently verifies ES256/RS256 JWT signature against the configured project's JWKS, issuer `${SUPABASE_URL}/auth/v1`, audience `authenticated`, expiry, UUID subject, role, email, and non-anonymous claim. The verified subject maps to a local `User`, created on first protected profile access. Neither cookie content nor client-supplied IDs authorize the API. Socket handshakes reuse this verification and disconnect at JWT expiry. The provider URL/publishable key and Google provider must be configured externally; no service role key is used.
 
 ## 14. Authorization / RBAC
 
-Roles: OWNER (settings, membership roles, transfer, archive); ADMIN (rename, invite, projects/boards/columns); EDITOR (tasks and labels; later comments/files); VIEWER (read only). Phase 3 API checks membership on each workspace path and hides inaccessible workspaces with 404. OWNER cannot be removed/demoted through the role route; transfer changes `ownerId` and both memberships in a serializable transaction. Admin cannot invite admin; no invitation can grant owner. Phase 4 project and board requests resolve workspace lineage server-side and enforce the same membership rules. Phase 5 task requests resolve board/project/workspace lineage and reject assignments to non-members and labels from other projects. Future nested resources must do the same. Socket room joins will require authorization in Phase 6.
+Roles: OWNER (settings, membership roles, transfer, archive); ADMIN (rename, invite, projects/boards/columns); EDITOR (tasks and labels; later comments/files); VIEWER (read only). Phase 3 API checks membership on each workspace path and hides inaccessible workspaces with 404. OWNER cannot be removed/demoted through the role route; transfer changes `ownerId` and both memberships in a serializable transaction. Admin cannot invite admin; no invitation can grant owner. Phase 4 project and board requests resolve workspace lineage server-side and enforce the same membership rules. Phase 5 task requests resolve board/project/workspace lineage and reject assignments to non-members and labels from other projects. Socket board joins resolve the same lineage and membership; removal disconnects that user's sockets. Future nested resources must do the same.
 
 ## 15. REST API Design
 
@@ -73,11 +73,11 @@ Version prefix `/api/v1`. Implemented: `GET /health`; `GET/PATCH /users/me`; `GE
 
 ## 16. Real-Time Architecture
 
-Socket.IO gateway will authorize handshake and joins. Rooms: `user:{id}`, `workspace:{id}`, `project:{id}`, `board:{id}`, `task:{id}`. Server sends events only after durable commit; outbox or reliable publication may be added when actual scale warrants it. Clients deduplicate event IDs and refetch on reconnect. Redis adapter distributes socket traffic across API instances in Phase 16.
+The `/realtime` Socket.IO namespace uses WebSocket transport and verifies the Supabase bearer token during handshake. The server enforces `WEB_ORIGIN`, disconnects at JWT expiry, and checks workspace membership through board lineage on each `board.join`. A connection joins one `board:{id}` and `workspace:{id}` room plus its `user:{id}` room; switching boards clears previous board/workspace rooms. Membership removal and workspace archive disconnect affected sockets. REST mutations publish best-effort events after durable commit. The board client deduplicates event IDs and refetches on reconnect, including after token expiry. There is no durable replay/outbox, presence, or cross-instance Redis adapter yet; missed publications require a page refresh or reconnection. The Redis adapter is planned for Phase 16.
 
 ## 17. WebSocket Event Catalog
 
-Planned: `task.created`, `task.updated`, `task.moved`, `task.deleted`, `comment.created`, `comment.updated`, `comment.deleted`, `member.joined`, `member.left`, `presence.online`, `presence.offline`, `typing.started`, `typing.stopped`, `board.updated`, `notification.created`. Envelope: `{event,eventId,workspaceId,projectId?,boardId?,entityId,actorId,version?,timestamp,payload}`. The server constructs actor and routing fields; payloads should be small. No events exist in Phase 1.
+Implemented: `task.created`, `task.updated`, `task.moved`, `task.deleted`, and `board.updated`. Planned: `comment.created`, `comment.updated`, `comment.deleted`, `member.joined`, `member.left`, `presence.online`, `presence.offline`, `typing.started`, `typing.stopped`, and `notification.created`. Envelope: `{event,eventId,workspaceId,projectId,boardId,entityId,actorId,version,timestamp,payload}`. The server constructs actor and routing fields; current payloads are empty because clients refetch canonical REST state.
 
 ## 18. Presence System
 
@@ -89,7 +89,7 @@ Boards use integer `version` for column changes. Each column mutation sends `exp
 
 ## 20. Optimistic UI Strategy
 
-For task moves, snapshot the board task list, apply an immediate local change, send the expected version, reconcile the returned canonical task, and roll back with an understandable conflict message on rejection. Phase 5 refetches after a successful REST move. Phase 6 will invalidate/refetch after socket events or reconnection. Never silently overwrite an edit.
+For task moves, snapshot the board task list, apply an immediate local change, send the expected version, reconcile the returned canonical task, and roll back with an understandable conflict message on rejection. The board refetches after REST moves, socket events, and reconnection; socket refresh waits while an optimistic move is in flight. Never silently overwrite an edit.
 
 ## 21. Redis Architecture
 
@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phase 5 — Tasks and board movement locally implemented and tested using mock JWKS. Live Supabase/Google flows need project configuration. Next is Phase 6 authenticated real-time events. Main has been pushed through Phase 4; Phase 5 will be pushed after its commit. The first GitHub Actions run still needs review. See `process.md` for exact results.
+Phases 0–6 are locally implemented and tested using mock JWKS. Phase 6 adds authenticated Socket.IO board events and board refresh. Live Supabase/Google flows need project configuration. Next is Phase 7 Redis presence. The first GitHub Actions run still needs review. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 
@@ -165,7 +165,7 @@ Phase 0 documentation/governance; 1 monorepo/web/API/Postgres/Redis/health/env/l
 
 ## 39. Known Issues / Technical Debt
 
-Sockets, presence, comments, activity, notifications, files, and search are not implemented. Authenticated project/board/task screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub CI status has not been verified and no production deployment exists. Future event delivery must specify recovery of missed publications before production use. Status is updated in `process.md` after checks.
+Presence, comments, activity, notifications, files, and search are not implemented. Authenticated project/board/task screens and drag/drop have not been visually checked against a live signed-in session. The board view currently caps its progressive task load at 1,000 tasks. Workspace invitation delivery is a one-time share link; email sending is not implemented. Workspace archive has no restore UI/API yet. The DB probe is a temporary infrastructure aid. Supabase credentials and Google OAuth provider are absent, so live browser authentication is untested. GitHub CI status has not been verified and no production deployment exists. Socket publication is best-effort and cannot replay missed events; multi-instance delivery requires the planned Redis adapter. Status is updated in `process.md` after checks.
 
 ## 40. Architecture Decision Log
 
@@ -176,7 +176,7 @@ Status: Accepted. Context: modular API with guards and socket gateway needed. De
 Status: Accepted. Context: relational collaborative data and migrations. Decision: PostgreSQL plus Prisma with checked-in migrations. Alternatives Considered: document store, raw SQL. Consequences: transactional constraints and type-safe access; ORM version must be pinned and migrations reviewed.
 
 ### ADR-003 — Socket.IO and Redis
-Status: Accepted for future phases. Context: authorized rooms, reconnection, multiple API instances. Decision: Socket.IO and Redis adapter/presence. Alternatives Considered: raw WebSocket and database polling. Consequences: extra infrastructure and protocol versioning; REST remains authoritative.
+Status: Socket.IO accepted and implemented in Phase 6; Redis adapter/presence planned. Context: authorized rooms, reconnection, multiple API instances. Decision: Socket.IO with REST refresh after small invalidation events; add Redis adapter/presence in later phases. Alternatives Considered: raw WebSocket and database polling. Consequences: extra infrastructure and protocol versioning; REST remains authoritative. Best-effort publication has no durable replay.
 
 ### ADR-004 — Task ranking and versioning
 Status: Accepted for Phase 5/8 implementation. Context: moves and conflicting edits. Decision: lexicographic ranks plus compare-and-swap integer versions. Alternatives Considered: renumbering all positions, last-write-wins. Consequences: occasional rebalance transaction; explicit conflict UI.

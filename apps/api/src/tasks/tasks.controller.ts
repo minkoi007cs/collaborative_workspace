@@ -18,6 +18,7 @@ import { TaskPriority } from '@prisma/client';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
+import { RealtimePublisher } from '../realtime/realtime.publisher';
 import { TasksService } from './tasks.service';
 
 const uuid = z.string().uuid();
@@ -70,7 +71,10 @@ function identity(request: AuthenticatedRequest): AuthIdentity {
 @Controller('boards/:boardId/tasks')
 @UseGuards(AuthGuard)
 export class BoardsTasksController {
-  constructor(@Inject(TasksService) private readonly tasks: TasksService) {}
+  constructor(
+    @Inject(TasksService) private readonly tasks: TasksService,
+    @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+  ) {}
 
   @Get()
   list(
@@ -84,23 +88,29 @@ export class BoardsTasksController {
   }
 
   @Post()
-  create(
+  async create(
     @Req() request: AuthenticatedRequest,
     @Param('boardId', ParseUUIDPipe) boardId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.create(
-      identity(request),
+    const auth = identity(request);
+    const task = await this.tasks.create(
+      auth,
       boardId,
       parse(createSchema, body),
     );
+    await this.realtime.publishTaskForIdentity('task.created', task, auth);
+    return task;
   }
 }
 
 @Controller('tasks')
 @UseGuards(AuthGuard)
 export class TasksController {
-  constructor(@Inject(TasksService) private readonly tasks: TasksService) {}
+  constructor(
+    @Inject(TasksService) private readonly tasks: TasksService,
+    @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
+  ) {}
 
   @Get(':taskId')
   get(
@@ -111,85 +121,116 @@ export class TasksController {
   }
 
   @Patch(':taskId')
-  update(
+  async update(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.update(
-      identity(request),
+    const auth = identity(request);
+    const task = await this.tasks.update(
+      auth,
       taskId,
       parse(updateSchema, body),
     );
+    await this.realtime.publishTaskForIdentity('task.updated', task, auth);
+    return task;
   }
 
   @Post(':taskId/move')
-  move(
+  async move(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.move(identity(request), taskId, parse(moveSchema, body));
+    const auth = identity(request);
+    const task = await this.tasks.move(auth, taskId, parse(moveSchema, body));
+    await this.realtime.publishTaskForIdentity('task.moved', task, auth);
+    return task;
   }
 
   @Post(':taskId/copy')
-  copy(
+  async copy(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
   ) {
-    return this.tasks.copy(identity(request), taskId);
+    const auth = identity(request);
+    const task = await this.tasks.copy(auth, taskId);
+    await this.realtime.publishTaskForIdentity('task.created', task, auth);
+    return task;
   }
 
   @Put(':taskId/assignees')
-  assignees(
+  async assignees(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.setAssignees(
-      identity(request),
+    const auth = identity(request);
+    const task = await this.tasks.setAssignees(
+      auth,
       taskId,
       parse(assigneeSchema, body),
     );
+    await this.realtime.publishTaskForIdentity('task.updated', task, auth);
+    return task;
   }
 
   @Put(':taskId/labels')
-  labels(
+  async labels(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.setLabels(
-      identity(request),
+    const auth = identity(request);
+    const task = await this.tasks.setLabels(
+      auth,
       taskId,
       parse(labelsSchema, body),
     );
+    await this.realtime.publishTaskForIdentity('task.updated', task, auth);
+    return task;
   }
 
   @Delete(':taskId')
-  archive(
+  async archive(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.archive(
-      identity(request),
+    const auth = identity(request);
+    const before = await this.tasks.get(auth, taskId);
+    const result = await this.tasks.archive(
+      auth,
       taskId,
       parse(archiveSchema, body).expectedVersion,
     );
+    await this.realtime.publishTaskForIdentity(
+      'task.deleted',
+      { id: taskId, boardId: before.boardId, version: before.version + 1 },
+      auth,
+    );
+    return result;
   }
 
   @Delete(':taskId/permanent')
-  deletePermanent(
+  async deletePermanent(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() body: unknown,
   ) {
-    return this.tasks.deletePermanent(
-      identity(request),
+    const auth = identity(request);
+    const before = await this.tasks.get(auth, taskId);
+    const result = await this.tasks.deletePermanent(
+      auth,
       taskId,
       parse(archiveSchema, body).expectedVersion,
     );
+    await this.realtime.publishTaskForIdentity(
+      'task.deleted',
+      { id: taskId, boardId: before.boardId, version: before.version + 1 },
+      auth,
+    );
+    return result;
   }
 }
 

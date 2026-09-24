@@ -1,6 +1,6 @@
 # SyncSpace
 
-SyncSpace is a planned real-time workspace and task collaboration platform. The repository currently contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, and Phase 5 task management. Live collaboration is the next milestone.
+SyncSpace is a workspace and task collaboration platform under development. The repository contains governance, the Phase 1 foundation, Phase 2 authentication/profile flows, Phase 3 workspace membership and invitations, Phase 4 projects and boards, Phase 5 task management, and Phase 6 authenticated board updates. Presence, comments, activity, notifications, and production operations remain on the roadmap.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ SyncSpace is a planned real-time workspace and task collaboration platform. The 
 flowchart LR
   B[Browser] --> W[Next.js web]
   W -->|REST| A[NestJS API]
-  W -. future Socket.IO .-> A
+  W -->|authenticated Socket.IO| A
   A --> P[(PostgreSQL)]
   A --> R[(Redis)]
 ```
@@ -32,7 +32,10 @@ For sign-up and login, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUB
 
 Signed-in users can create workspaces, invite teammates with a one-time link, and manage roles. Workspace owners and admins can create projects, add boards, and manage ordered columns. Editors and above can create and edit tasks, assign workspace members, add labels, set priority/due date, copy/archive tasks, and move them by drag/drop or keyboard controls. Task and column changes detect stale versions. Invitations are shared manually for now; email delivery is not implemented. The workspace owner can transfer ownership and archive the workspace. Archived workspaces and projects cannot currently be restored in the UI.
 
+Board pages join an authorized Socket.IO room and refresh after task or column events. Connections use the current Supabase access token, are closed when it expires or membership is removed, and rejoin after reconnection. A visible status tells users when live updates are unavailable. REST remains the source of truth; there is no durable event replay or multi-instance socket adapter yet.
+
 Web: `http://localhost:3000`. API health: `http://localhost:3001/api/v1/health`. The database migration command requires Docker or a compatible PostgreSQL instance. Redis is checked during API startup.
+If the web server uses another port, set `WEB_ORIGIN` to that exact browser origin so REST and Socket.IO connections are accepted.
 
 ## Checks
 

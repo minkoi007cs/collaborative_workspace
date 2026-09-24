@@ -16,6 +16,7 @@ import {
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest, AuthIdentity } from '../auth/auth.types';
+import { RealtimePublisher } from '../realtime/realtime.publisher';
 import { ProjectsService } from './projects.service';
 
 const nameSchema = z
@@ -140,6 +141,7 @@ export class ProjectsController {
 export class BoardsController {
   constructor(
     @Inject(ProjectsService) private readonly projects: ProjectsService,
+    @Inject(RealtimePublisher) private readonly realtime: RealtimePublisher,
   ) {}
 
   @Get(':boardId')
@@ -151,58 +153,70 @@ export class BoardsController {
   }
 
   @Post(':boardId/columns')
-  addColumn(
+  async addColumn(
     @Req() request: AuthenticatedRequest,
     @Param('boardId', ParseUUIDPipe) boardId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.addColumn(
-      identity(request),
+    const auth = identity(request);
+    const board = await this.projects.addColumn(
+      auth,
       boardId,
       parse(columnSchema, body),
     );
+    await this.realtime.publishBoardForIdentity(board, auth);
+    return board;
   }
 
   @Patch(':boardId/columns/:columnId')
-  renameColumn(
+  async renameColumn(
     @Req() request: AuthenticatedRequest,
     @Param('boardId', ParseUUIDPipe) boardId: string,
     @Param('columnId', ParseUUIDPipe) columnId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.renameColumn(
-      identity(request),
+    const auth = identity(request);
+    const board = await this.projects.renameColumn(
+      auth,
       boardId,
       columnId,
       parse(columnSchema, body),
     );
+    await this.realtime.publishBoardForIdentity(board, auth);
+    return board;
   }
 
   @Delete(':boardId/columns/:columnId')
-  removeColumn(
+  async removeColumn(
     @Req() request: AuthenticatedRequest,
     @Param('boardId', ParseUUIDPipe) boardId: string,
     @Param('columnId', ParseUUIDPipe) columnId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.removeColumn(
-      identity(request),
+    const auth = identity(request);
+    const board = await this.projects.removeColumn(
+      auth,
       boardId,
       columnId,
       parse(versionSchema, body).expectedVersion,
     );
+    await this.realtime.publishBoardForIdentity(board, auth);
+    return board;
   }
 
   @Put(':boardId/columns/order')
-  reorderColumns(
+  async reorderColumns(
     @Req() request: AuthenticatedRequest,
     @Param('boardId', ParseUUIDPipe) boardId: string,
     @Body() body: unknown,
   ) {
-    return this.projects.reorderColumns(
-      identity(request),
+    const auth = identity(request);
+    const board = await this.projects.reorderColumns(
+      auth,
       boardId,
       parse(orderSchema, body),
     );
+    await this.realtime.publishBoardForIdentity(board, auth);
+    return board;
   }
 }
