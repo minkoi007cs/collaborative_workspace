@@ -5,10 +5,10 @@
 Current Phase: Phase 14 — Security/performance/accessibility hardening (in progress; Phase 12 attachments and Phase 11 email delivery pending)
 Current Milestone: Invitation abuse limits and basic browser response protections
 Current Branch: main
-Current Focus: Continue Phase 14 hardening and Phase 12 private attachments
-Last Completed Feature: Redis invitation limits, clearer 429/503 UX, and browser security headers
-Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; first GitHub CI run still needs review
-Next Recommended Task: Review API security/performance/accessibility gaps and configure private object storage for Phase 12 attachments
+Current Focus: Repair and verify GitHub CI, then continue Phase 14 hardening and Phase 12 private attachments
+Last Completed Feature: Fixed conflicting pnpm versions in GitHub Actions setup
+Current Known Issues: No Supabase project credentials; live email/Google sign-in and authenticated UI untested; private attachments and invitation email delivery absent; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay or multi-instance adapter; archive restore absent; CI fix awaits a successful remote run
+Next Recommended Task: Verify the GitHub Actions run after the pnpm setup fix
 
 ---
 
@@ -1219,3 +1219,84 @@ Phase 14 hardening is underway. Phases 0–10, Phase 11 inbox/alerts/reminders, 
 ### Next Recommended Task
 
 Audit remaining API security/performance/accessibility risks and configure private object storage for attachments.
+
+## [2026-09-24] Change ID: PROC-015
+
+Author: Codex
+Branch: main
+Planned Commit Message: `fix(ci): use manifest pnpm version`
+
+### Summary
+
+Investigated remote GitHub Actions failures and removed the conflicting pnpm version input from the checks workflow.
+
+### Reason
+
+All recent `checks` jobs failed in `pnpm/action-setup@v4` before dependency installation. The workflow requested pnpm `10`, while `package.json` pins `pnpm@10.17.1`. The action rejects mismatched version declarations.
+
+### Features Added
+
+- None.
+
+### Features Modified
+
+- CI uses the exact pnpm version from `packageManager` in the repository manifest.
+- Current status and audit now reflect the observed remote failure and verification requirement.
+
+### Features Removed
+
+- Redundant `version: 10` workflow input.
+
+### Files / Modules Affected
+
+- `.github/workflows/ci.yml`, audit, `tech.nmd`, and this log.
+
+### Database Changes
+
+- None.
+
+### API Changes
+
+- None.
+
+### WebSocket Changes
+
+- None.
+
+### Security Impact
+
+- The checks job can now proceed to installation, tests, and builds; process-history validation was already green. No permissions or secrets changed.
+
+### Tests Added or Updated
+
+- None; the GitHub runner is the required verification for this workflow fix.
+
+### Tests Run
+
+- GitHub API confirmed the `checks` job failed at pnpm setup for recent commits, while the `process` job passed.
+- Official `pnpm/action-setup` source confirms it rejects a workflow `version` that differs from `packageManager`.
+- A new GitHub Actions run must complete after push.
+
+### Known Problems
+
+The checks job may reveal later failures after pnpm setup is repaired. Supabase credentials and storage/email providers remain absent for live QA and later features.
+
+### Technical Debt Introduced
+
+- None.
+
+### Architecture Decisions
+
+Use one authoritative pnpm pin in `package.json`; let the action read it rather than declaring a second version.
+
+### tech.nmd Updated?
+
+Yes; current CI status and verification requirement updated.
+
+### Current Project State After This Change
+
+CI setup is corrected in source. A passing remote run remains to be verified.
+
+### Next Recommended Task
+
+Inspect the new GitHub Actions run and fix any downstream failures it reveals.
