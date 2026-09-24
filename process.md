@@ -5,8 +5,8 @@
 Current Phase: Phase 16 cross-instance Socket.IO fanout implemented locally; Phase 14 hardening continues
 Current Milestone: Redis-backed room events and remote socket revocation
 Current Branch: main
-Current Focus: Verify Phase 16 in remote CI, then configure and validate Supabase Auth and private Storage
-Last Completed Feature: Two-instance realtime integration test passes with the Socket.IO Redis adapter
+Current Focus: Configure and validate Supabase Auth and private Storage, then prepare deployment operations
+Last Completed Feature: Phase 16 cross-instance Socket.IO fanout passed two-instance tests and GitHub CI
 Current Known Issues: No Supabase project credentials; live email/Google sign-in, authenticated UI, and real-bucket upload untested; invitation email delivery absent; pending upload/orphan cleanup needs a worker; search covers task text only; inbox requires refresh; due scans can lag 15 minutes; activity writes can leave gaps on postcommit failure; socket publication has no durable replay; archive restore absent
 Next Recommended Task: Supply project Supabase configuration and private bucket for live end-to-end QA; plan deployment operations
 
@@ -1626,3 +1626,81 @@ Phase 16 is implemented and locally verified across two API instances. This comm
 ### Next Recommended Task
 
 Verify GitHub Actions, then configure Supabase Auth and Storage for end-to-end QA and prepare deployment operations.
+
+## [2026-09-24] Change ID: PROC-020
+
+Author: Codex
+Branch: main
+Planned Commit Message: `docs(process): record Phase 16 CI result`
+
+### Summary
+
+Recorded the successful GitHub Actions run for Phase 16 and updated the current project status.
+
+### Reason
+
+The implementation entry was written before the hosted integration and build jobs finished.
+
+### Features Added
+
+- GitHub Actions run `36044422694` for commit `4becff6` completed successfully; `checks` and `process` jobs both passed.
+
+### Features Modified
+
+- Current status and technical specification now reflect remote Phase 16 verification.
+
+### Features Removed
+
+- Stale statement that Phase 16 CI was pending.
+
+### Files / Modules Affected
+
+- `process.md`, `tech.nmd`.
+
+### Database Changes
+
+- None.
+
+### API Changes
+
+- None.
+
+### WebSocket Changes
+
+- None.
+
+### Security Impact
+
+- Hosted integration checked remote socket revocation using two API instances.
+
+### Tests Added or Updated
+
+- None.
+
+### Tests Run
+
+- GitHub Actions run `36044422694`: completed successfully with installation, migration, checks, integration tests, production builds, and process-history guard.
+
+### Known Problems
+
+- Live Supabase Auth/Storage, invitation email delivery, deployment, and durable event replay remain open.
+
+### Technical Debt Introduced
+
+- None.
+
+### Architecture Decisions
+
+- Keep hosted CI outcomes in the chronological project handoff log.
+
+### tech.nmd Updated?
+
+Yes; current development phase text corrected.
+
+### Current Project State After This Change
+
+Phase 16 is on `main`, remotely verified, and this documentation update remains to be pushed.
+
+### Next Recommended Task
+
+Supply Supabase project configuration for live account and private file QA; prepare deployment runbooks and release gates.

@@ -157,7 +157,7 @@ Implementation, strict typing, validation, server authorization, errors, relevan
 
 ## 37. Current Development Phase
 
-Phases 0–10, Phase 11 inbox/core notification events/due reminders, Phase 12 private attachments, Phase 13 task search, part of Phase 14 security hardening, and Phase 16 cross-instance Socket.IO delivery are implemented and locally tested using mock JWKS and storage. Phase 11 invitation email delivery remains open. Live Supabase Auth, Google, and Storage flows need project configuration. GitHub Actions run `36043393464` passed both checks and process jobs for the Phase 12 commit; Phase 16 remote CI is pending. See `process.md` for exact results.
+Phases 0–10, Phase 11 inbox/core notification events/due reminders, Phase 12 private attachments, Phase 13 task search, part of Phase 14 security hardening, and Phase 16 cross-instance Socket.IO delivery are implemented and locally tested using mock JWKS and storage. Phase 11 invitation email delivery remains open. Live Supabase Auth, Google, and Storage flows need project configuration. GitHub Actions runs `36043393464` and `36044422694` passed both checks and process jobs for the Phase 12 and Phase 16 commits. See `process.md` for exact results.
 
 ## 38. Complete Product Roadmap
 
