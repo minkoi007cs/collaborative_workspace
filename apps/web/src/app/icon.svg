@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="collabBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#130b24"/>
+      <stop offset="100%" stop-color="#241442"/>
+    </linearGradient>
+    <linearGradient id="ring1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <linearGradient id="ring2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#collabBg)" stroke="url(#ring1)" stroke-width="2"/>
+  <circle cx="26" cy="32" r="11" fill="none" stroke="url(#ring1)" stroke-width="3.5" opacity="0.9"/>
+  <circle cx="38" cy="32" r="11" fill="none" stroke="url(#ring2)" stroke-width="3.5" opacity="0.9"/>
+  <circle cx="32" cy="32" r="3" fill="#ffffff"/>
+</svg>

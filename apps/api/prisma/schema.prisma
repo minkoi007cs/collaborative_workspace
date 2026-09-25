@@ -12,7 +12,7 @@ model InfrastructureProbe {
   id        String   @id @default(uuid()) @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("infrastructure_probe")
+  @@map("cw_infrastructure_probe")
 }
 
 model User {
@@ -35,7 +35,7 @@ model User {
   activityEvents        ActivityEvent[]
   uploadedAttachments   Attachment[]          @relation("AttachmentUploader")
 
-  @@map("users")
+  @@map("cw_users")
 }
 
 enum WorkspaceRole {
@@ -60,7 +60,7 @@ model Workspace {
   archivedAt     DateTime?             @map("archived_at")
 
   @@index([ownerId])
-  @@map("workspaces")
+  @@map("cw_workspaces")
 }
 
 model WorkspaceMember {
@@ -76,7 +76,7 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([userId])
-  @@map("workspace_members")
+  @@map("cw_workspace_members")
 }
 
 model WorkspaceInvitation {
@@ -94,7 +94,7 @@ model WorkspaceInvitation {
   sender      User          @relation("InvitationSender", fields: [invitedBy], references: [id])
 
   @@index([workspaceId, email])
-  @@map("workspace_invitations")
+  @@map("cw_workspace_invitations")
 }
 
 enum ProjectStatus {
@@ -119,7 +119,7 @@ model Project {
   activityEvents ActivityEvent[]
 
   @@index([workspaceId, status])
-  @@map("projects")
+  @@map("cw_projects")
 }
 
 model Board {
@@ -134,7 +134,7 @@ model Board {
   tasks     Task[]
 
   @@index([projectId])
-  @@map("boards")
+  @@map("cw_boards")
 }
 
 model Column {
@@ -149,7 +149,7 @@ model Column {
 
   @@unique([id, boardId])
   @@index([boardId, position])
-  @@map("columns")
+  @@map("cw_columns")
 }
 
 enum TaskPriority {
@@ -189,7 +189,7 @@ model Task {
   @@index([boardId, archivedAt])
   @@index([columnId, rank])
   @@index([dueAt, id])
-  @@map("tasks")
+  @@map("cw_tasks")
 }
 
 model TaskAssignee {
@@ -201,7 +201,7 @@ model TaskAssignee {
 
   @@id([taskId, userId])
   @@index([userId])
-  @@map("task_assignees")
+  @@map("cw_task_assignees")
 }
 
 model Label {
@@ -214,7 +214,7 @@ model Label {
   tasks     TaskLabel[]
 
   @@unique([projectId, name])
-  @@map("labels")
+  @@map("cw_labels")
 }
 
 model TaskLabel {
@@ -225,7 +225,7 @@ model TaskLabel {
 
   @@id([taskId, labelId])
   @@index([labelId])
-  @@map("task_labels")
+  @@map("cw_task_labels")
 }
 
 model Comment {
@@ -243,7 +243,7 @@ model Comment {
   notifications Notification[]
 
   @@index([taskId, createdAt, id])
-  @@map("comments")
+  @@map("cw_comments")
 }
 
 model CommentMention {
@@ -254,7 +254,7 @@ model CommentMention {
 
   @@id([commentId, userId])
   @@index([userId])
-  @@map("comment_mentions")
+  @@map("cw_comment_mentions")
 }
 
 enum NotificationType {
@@ -284,7 +284,7 @@ model Notification {
 
   @@index([recipientId, createdAt])
   @@index([workspaceId, createdAt])
-  @@map("notifications")
+  @@map("cw_notifications")
 }
 
 enum AttachmentStatus {
@@ -307,7 +307,7 @@ model Attachment {
   uploader      User             @relation("AttachmentUploader", fields: [uploaderId], references: [id])
 
   @@index([taskId, status, createdAt])
-  @@map("attachments")
+  @@map("cw_attachments")
 }
 
 enum ActivityType {
@@ -352,5 +352,5 @@ model ActivityEvent {
 
   @@index([workspaceId, createdAt, id])
   @@index([taskId, createdAt, id])
-  @@map("activity_events")
+  @@map("cw_activity_events")
 }
